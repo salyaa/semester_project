@@ -7,7 +7,7 @@ def bayesianInf(G):
 
 ## Variation EM
 def variationalEM(G: ig.Graph):
-    sbm = G.community_infomap() # fit an SBM using Variational EM
+    sbm = G.community_infomap() #fit SBM using VEM
     clusters = sbm.membership
     
     return clusters
