@@ -1,0 +1,6 @@
+igraph
+networkx
+sklearn
+numpy
+scipy
+matplotlib
