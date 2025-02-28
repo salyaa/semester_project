@@ -42,19 +42,22 @@ def louvain(G: ig.Graph, plot : bool = True):
     if plot:
         plot_clusters(G, clusters)
     return clusters
+# A function exists also for networkx graphs
 
 
-def leiden(G: ig.Graph, plot: bool=True):
+def leiden(G: ig.Graph, plot: bool=True, n: int=100):
     """Find the communities of an igraph graph G using the Leiden algorithm
 
     Args:
         G (igraph.Graph)
+        plot (boolean) : if true, plot the graph and the communities
+        n (int): number of iterations for the leiden algorithm
     
     Return:
         VertexClustering object from igraph
     """
     #clusters = ig.Graph.community_leiden(G)
-    clusters = G.community_leiden()
+    clusters = G.community_leiden(n_iterations=n, objective_function="modularity")
     
     if plot:
         plot_clusters(G, clusters)

@@ -4,6 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.sparse import csr_matrix
 
+
 def plot_clust(G: nx.Graph, clusters):
     """Plot the graph with nodes colored by their cluster assignments.
 
@@ -11,13 +12,11 @@ def plot_clust(G: nx.Graph, clusters):
         G (nx.Graph): The input graph.
         clusters (list): List of cluster labels for each node.
     """
-    # Choose a layout for the graph (spring layout for better spacing)
     pos = nx.spring_layout(G, seed=42)
 
-    # Get unique clusters and assign colors
     unique_clusters = np.unique(clusters)
     num_clusters = len(unique_clusters)
-    colors = plt.cm.get_cmap("viridis", num_clusters)  # Color map
+    colors = plt.cm.get_cmap("viridis", num_clusters)
 
     plt.figure(figsize=(8, 8))
     for i, cluster in enumerate(unique_clusters):
@@ -38,17 +37,12 @@ def spectral(G: nx.Graph, K: int, plot: bool=True):
     Returns:
         list: Cluster labels for each node.
     """
-    # Convert graph to adjacency matrix
     A = nx.adjacency_matrix(G).astype(np.float32)
+    A = csr_matrix(A, dtype=np.float32) # Use a sparse matrix
 
-    # Convert to sparse format with the correct dtype
-    A = csr_matrix(A, dtype=np.float32)
-
-    # Perform spectral clustering
     spectral_clustering = SpectralClustering(n_clusters=K, n_init=100, affinity="precomputed", random_state=42)
     spectral_clustering.fit(A)
 
-    # Get cluster assignments
     clusters = spectral_clustering.labels_
     
     if plot:
