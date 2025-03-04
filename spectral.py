@@ -27,7 +27,7 @@ def plot_clust(G: nx.Graph, clusters):
     plt.show()
 
 
-def spectral(G: nx.Graph, K: int, plot: bool=True):
+def spectral(G: nx.Graph, K: int, plot: bool=False):
     """Perform Spectral Clustering on a graph.
 
     Args:
@@ -40,7 +40,12 @@ def spectral(G: nx.Graph, K: int, plot: bool=True):
     A = nx.adjacency_matrix(G).astype(np.float32)
     A = csr_matrix(A, dtype=np.float32) # Use a sparse matrix
 
-    spectral_clustering = SpectralClustering(n_clusters=K, n_init=100, affinity="precomputed", random_state=42)
+    spectral_clustering = SpectralClustering(
+        n_clusters=K, 
+        n_init=100, 
+        affinity="precomputed", 
+        random_state=42
+    )
     spectral_clustering.fit(A)
 
     clusters = spectral_clustering.labels_

@@ -25,7 +25,7 @@ def plot_clusters(G: ig.Graph, clusters):
     plt.show()
 
 
-def louvain(G: ig.Graph, plot : bool = True):
+def louvain(G: ig.Graph, plot : bool = False):
     # https://github.com/vtraag/louvain-igraph?tab=readme-ov-file
     """Find the communities of an igraph graph G using the Louvain algorithm
 
@@ -37,15 +37,12 @@ def louvain(G: ig.Graph, plot : bool = True):
         list: A list of VertexClustering objects, representing the communities
     """
     clusters = G.community_multilevel()
-    #clusters = lv.find_partition(G, lv.ModularityVertexPartition) 
-    # Obtain almost the same results for Karate Club graph and ER graph 
     if plot:
         plot_clusters(G, clusters)
     return clusters
-# A function exists also for networkx graphs
 
 
-def leiden(G: ig.Graph, plot: bool=True, n: int=100):
+def leiden(G: ig.Graph, plot: bool=False, n: int=1000):
     """Find the communities of an igraph graph G using the Leiden algorithm
 
     Args:
@@ -56,13 +53,9 @@ def leiden(G: ig.Graph, plot: bool=True, n: int=100):
     Return:
         VertexClustering object from igraph
     """
-    #clusters = ig.Graph.community_leiden(G)
     clusters = G.community_leiden(n_iterations=n, objective_function="modularity")
     
     if plot:
         plot_clusters(G, clusters)
     
     return clusters
-
-
-#def bayan(G):

@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 # Use graph-tool 
 # (https://graph-tool.skewed.de/static/doc/demos/inference/inference.html)
 # OR Use PyMC / networkx
-def bayesianInf(G: gt.Graph, seed: int = None, plot: bool = True):
+def bayesianInf(G: gt.Graph, seed: int = 42, plot: bool = False):
     """
     Perform Bayesian inference on a graph using a degree-corrected stochastic block model (DC-SBM).
     
@@ -50,7 +50,7 @@ def bayesianInf(G: gt.Graph, seed: int = None, plot: bool = True):
     num_clusters = len(set(clusters))
     print(f"Number of inferred clusters: {num_clusters}")
     
-    return state, clusters
+    return clusters
 
 ## Variation EM
 # def variationalEM(G: ig.Graph):
