@@ -43,9 +43,9 @@ def sbm_generation(n: int = 100, K: int = 2, p: float = 0.5, nb_probas: int = 8,
                             model="blockmodel",
                             edge_probs=communities_matrix,
                             block_membership=block_membership)
-        
+
         G.vp["block"] = b
-        
+
         graphs[f"SBM_{modify}_{i}"] = G  
-    
+
     return graphs

@@ -25,7 +25,6 @@ def bayesianInf(G: gt.Graph, seed: int = 42, plot: bool = False):
 
     state = gt.minimize_blockmodel_dl(G, state_args=dict(deg_corr=True))
     state.mcmc_sweep(niter=000)
-    
     clusters = state.get_blocks()
     
     if plot and "pos" in G.vp:
@@ -48,10 +47,5 @@ def bayesianInf(G: gt.Graph, seed: int = 42, plot: bool = False):
                 output_size=(600, 600))
 
     num_clusters = len(set(clusters))
-    print(f"Number of inferred clusters: {num_clusters}")
     
     return clusters
-
-## Variation EM
-# def variationalEM(G: ig.Graph):
-#     return 0

@@ -40,19 +40,22 @@ def spectral(G: nx.Graph, K: int, plot: bool=False):
     A = nx.adjacency_matrix(G).astype(np.float32)
     A = csr_matrix(A, dtype=np.float32) # Use a sparse matrix
 
+    ## NOTE: this method already apply clustering to a projection of the NORMALIZED Laplacian
     spectral_clustering = SpectralClustering(
         n_clusters=K, 
         n_init=100, 
         affinity="precomputed", 
         random_state=42
     )
-    spectral_clustering.fit(A)
-
-    clusters = spectral_clustering.labels_
+    
+    #spectral_clustering.fit(A)
+    #clusters = spectral_clustering.labels_
+    
+    clusters = spectral_clustering.fit_predict(A)
     
     if plot:
         plot_clust(G, clusters)
 
     return clusters
 
-## Implement one using the non-backtracking matrix? normalized Laplacian?
+## Implement one using the non-backtracking matrix? Laplacian?
