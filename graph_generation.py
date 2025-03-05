@@ -1,7 +1,7 @@
 import graph_tool.all as gt 
 import numpy as np
 
-def sbm_generation(n: int = 100, K: int = 2, p: float = 0.5, nb_probas: int = 8, modify: str = "out"):
+def sbm_generation(n: int = 500, K: int = 3, p: float = 0.5, nb_probas: int = 8, modify: str = "out"):
     """
     Generate multiple SBM graphs while modifying either p_in or p_out.
 
@@ -18,6 +18,7 @@ def sbm_generation(n: int = 100, K: int = 2, p: float = 0.5, nb_probas: int = 8,
     
     assert 0 <= p <= 1, "p must be between 0 and 1"
     assert modify in ["in", "out"], "modify must be 'in' or 'out'"
+    assert K>2
 
     group_sizes = [n // K] * K
     remainder = n % K  
