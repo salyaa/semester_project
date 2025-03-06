@@ -14,10 +14,9 @@ def bayesianInf(G: gt.Graph, seed: int = 42, plot: bool = False):
     Parameters:
     - G (gt.Graph): The input graph.
     - seed (int): To control the randomness of mcmc_sweep()
-    - plot (bool): Whether to visualize the inferred clusters. Default is True.
+    - plot (bool): Whether to visualize the inferred clusters. Default is False.
     
     Returns:
-    - state (gt.BlockState): The fitted block model containing clustering information.
     - clusters (gt.PropertyMap): A mapping of nodes to inferred community labels.
     """
     if seed is not None:
@@ -45,7 +44,4 @@ def bayesianInf(G: gt.Graph, seed: int = 42, plot: bool = False):
                 vertex_size=node_size,
                 edge_pen_width=0.7,
                 output_size=(600, 600))
-
-    num_clusters = len(set(clusters))
-    
     return clusters

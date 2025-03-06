@@ -1,6 +1,6 @@
 import numpy as np 
 import pandas as pd 
-from sklearn.metrics import adjusted_mutual_info_score, adjusted_rand_score, v_measure_score
+from sklearn.metrics import adjusted_mutual_info_score, adjusted_rand_score, v_measure_score, homogeneity_score
 import igraph as ig
 import networkx as nx
 import graph_tool.all as gt
@@ -9,13 +9,13 @@ import matplotlib.pyplot as plt
 from graph_generation import sbm_generation
 
 algorithms = ["bayesian", "spectral", "leiden", "louvain"]
-possible_indexes = ["adjusted_mutual_info_score", "adjusted_rand_score", "v_measure_score"]
-# Other possible indices:
+possible_metrics = ["adjusted_mutual_info_score", "adjusted_rand_score", "v_measure_score","homogeneity_score"]
+# Other possible metric:
 #   - homogeneity_score
 #   - fowlkes_mallow_score
 
 
-def compute_indexes(index, algorithm, graphs):
+def compute_score(metric, algorithm, graphs):
     """Compute a given index for a dictionary of graphs
 
     Args:
@@ -27,14 +27,15 @@ def compute_indexes(index, algorithm, graphs):
         ind (dict()): return a dictionary of the wanted index for each graph
     """
     assert algorithm in algorithms, "the algorithm must be ones that we implemented"
-    assert index in possible_indexes
+    assert metric in possible_metrics
     
-    index_functions = {
+    metric_functions = {
         "adjusted_mutual_info_score": adjusted_mutual_info_score,
         "adjusted_rand_score": adjusted_rand_score,
-        "v_measure_score": v_measure_score #identical to normalized_mutual_info_score with the 'arithmetic' option for averaging.
+        "v_measure_score": v_measure_score, #identical to normalized_mutual_info_score with the 'arithmetic' option for averaging.
+        "homogeneity_score": homogeneity_score
     }
-    compute_index = index_functions[index] 
+    compute_metric = metric_functions[metric] 
     
     output = dict()
     #print(f"Compute the score {index} for {algorithm}")
@@ -61,11 +62,8 @@ def compute_indexes(index, algorithm, graphs):
                 lcc = max(nx.connected_components(graph_nx), key=len)
                 graph_nx = graph_nx.subgraph(lcc).copy()
                 
-                node_map = {node: i for i, node in enumerate(graph_nx.nodes())}
                 true_clusters = np.array([true_clusters[node] for node in graph_nx.nodes()])
-            else:
-                node_map = {node: i for i, node in enumerate(graph_nx.nodes())}
-                
+            
             predicted_clusters = spectral(graph_nx, K=len(set(true_clusters)))
         
         else:
@@ -77,20 +75,21 @@ def compute_indexes(index, algorithm, graphs):
             from modularity_based import louvain, leiden
             if algorithm == "louvain":
                 clusters = louvain(graph_ig)
-            else:
+            else: # algorithm == "leiden"
                 clusters = leiden(graph_ig)
             predicted_clusters = clusters.membership
         
+        # Had issue with graph conversion, so test this:
         if len(true_clusters) != len(predicted_clusters):
             raise ValueError(f"Size mismatch: True labels ({len(true_clusters)}) vs. Predicted labels ({len(predicted_clusters)}) in {key}")
         
-        ind = compute_index(true_clusters, predicted_clusters)
-        output[key] = ind
+        score = compute_metric(true_clusters, predicted_clusters)
+        output[key] = score
         #print(f"{key}: Score = {ind:.5f}")
-    avg_ind = np.mean(list(output.values()))
+    avg_score = np.mean(list(output.values()))
     #print(f"\n Average score = {avg_ind}. \n")
     
-    return ind, avg_ind
+    return score, avg_score
 
 
 def validation(K: int=2, nb_probas: int=5, modify : str="out"):
@@ -105,11 +104,11 @@ def validation(K: int=2, nb_probas: int=5, modify : str="out"):
         results (pd.DataFrame): Dataframe representing the average scores for each pairs.
     """
     sbm_graphs = sbm_generation(K=K, nb_probas=nb_probas, modify=modify)
-    results = pd.DataFrame(index=possible_indexes, columns=algorithms)
+    results = pd.DataFrame(index=possible_metrics, columns=algorithms)
     for algorithm in algorithms:
-        for ind in possible_indexes:
-            _, avg_score = compute_indexes(ind, algorithm, sbm_graphs)
-            results.loc[ind, algorithm] = avg_score
+        for metric in possible_metrics:
+            _, avg_score = compute_score(metric, algorithm, sbm_graphs)
+            results.loc[metric, algorithm] = avg_score
     print(f"Average scores computed for K = {K} and {nb_probas} graphs!")
     
     ## Save the results in a csv file
@@ -120,29 +119,29 @@ def validation(K: int=2, nb_probas: int=5, modify : str="out"):
     return results
 
 
-def validation_range_K(range_K, nb_probas: int=5, modify: str="out", plot: bool=False):
+def validation_range_K(range_K, nb_probas: int=5, modify: str="out", plot: bool=True):
     """Complete the average score for all possible pairs (index, algorithm) for various number of true clusters.
 
     Args:
         range_K (np.array): The different values of clusters we consider.
         nb_probas (int, optional): Number of graphs. Defaults to 5.
         modify (str, optional): Decide if we modify p_in or p_out. Defaults to "out".
-        plot (boolean, optional): if True, plot the results over range_K for each index. Defaults to False.
+        plot (boolean, optional): if True, plot the results over range_K for each index. Defaults to True.
 
     Returns:
         results (pd.DataFrame): Dataframe with multiple indexes (K, index) representing the average score for each pair.
     """
     multi_ind = pd.MultiIndex.from_product(
-        [range_K, possible_indexes], names=["K", "Metric"]
+        [range_K, possible_metrics], names=["K", "Metric"]
     )
     results = pd.DataFrame(index=multi_ind, columns=algorithms)
     
     for K in range_K:
         sbm_graphs = sbm_generation(K=K, nb_probas=nb_probas, modify=modify)
         for algorithm in algorithms:
-            for index in possible_indexes:
-                _, avg_score = compute_indexes(index, algorithm, sbm_graphs)
-                results.loc[(K, index), algorithm] = avg_score
+            for metric in possible_metrics:
+                _, avg_score = compute_score(metric, algorithm, sbm_graphs)
+                results.loc[(K, metric), algorithm] = avg_score
         print(f"Completed K = {K}.")
     
     ## Save the results in a csv file
@@ -159,15 +158,15 @@ def validation_range_K(range_K, nb_probas: int=5, modify: str="out", plot: bool=
 
 def plot_results_range_K(results, title: str=None):
     algos = results.columns 
-    indexes = results.index.get_level_values("Metric").unique()
+    metrics = results.index.get_level_values("Metric").unique()
     range_K = results.index.get_level_values("K").unique()  
 
-    f, axs = plt.subplots(1, len(indexes), figsize=(5 * len(indexes), 5), sharex=True, sharey=True)
+    f, axs = plt.subplots(1, len(metrics), figsize=(5 * len(metrics), 5), sharex=True, sharey=True)
 
-    if len(indexes) == 1: # if there is only one index
+    if len(metrics) == 1: # if there is only one index
         axs = [axs]
 
-    for i, ind in enumerate(indexes):
+    for i, ind in enumerate(metrics):
         avg_scores = results.xs(ind, level="Metric")
 
         for algo in algos:

@@ -31,7 +31,7 @@ def louvain(G: ig.Graph, plot : bool = False):
 
     Args:
         G (igraph.Graph)
-        plot (boolean): if true, plot the graph with different colors for the clusters
+        plot (boolean): If true, plot the graph with different colors for the clusters
     
     Return:
         list: A list of VertexClustering objects, representing the communities

@@ -33,12 +33,13 @@ def spectral(G: nx.Graph, K: int, plot: bool=False):
     Args:
         G (nx.Graph): The input graph.
         K (int): The number of clusters.
+        plot (boolean): If True, plot the graph with the inferred clusters. Default to False
 
     Returns:
         list: Cluster labels for each node.
     """
     A = nx.adjacency_matrix(G).astype(np.float32)
-    A = csr_matrix(A, dtype=np.float32) # Use a sparse matrix
+    A = csr_matrix(A, dtype=np.float32)
 
     ## NOTE: this method already apply clustering to a projection of the NORMALIZED Laplacian
     spectral_clustering = SpectralClustering(
@@ -47,10 +48,8 @@ def spectral(G: nx.Graph, K: int, plot: bool=False):
         affinity="precomputed", 
         random_state=42
     )
-    
     #spectral_clustering.fit(A)
     #clusters = spectral_clustering.labels_
-    
     clusters = spectral_clustering.fit_predict(A)
     
     if plot:
