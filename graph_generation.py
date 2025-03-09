@@ -1,7 +1,7 @@
 import graph_tool.all as gt 
 import numpy as np
 
-def sbm_generation(n: int = 500, K: int = 3, p: float = 0.5, nb_probas: int = 8, modify: str = "out"):
+def sbm_generation(n: int = 500, K: int = 3, p: float = 0.5, nb_probas: int = 8, range_p: np.array=None, modify: str = "out"):
     """
     Generate multiple SBM graphs while modifying either p_in or p_out.
 
@@ -26,7 +26,13 @@ def sbm_generation(n: int = 500, K: int = 3, p: float = 0.5, nb_probas: int = 8,
     for i in range(remainder):
         group_sizes[i] += 1
     
-    range_p = np.linspace(0, 1, num=nb_probas, endpoint=False)
+    if range_p is None:
+        if nb_probas == 1:
+            range_p = [0.5]
+        elif nb_probas == 2:
+            range_p = [0.25, 0.75]
+        else:
+            range_p = np.linspace(0, 1, num=nb_probas, endpoint=False)
     
     graphs = {}
     for i, p_mod in enumerate(range_p):
@@ -47,6 +53,6 @@ def sbm_generation(n: int = 500, K: int = 3, p: float = 0.5, nb_probas: int = 8,
 
         G.vp["block"] = b
         graphs[f"SBM_{modify}_{i}"] = G  
-    return graphs
+    return graphs, range_p
 
 ## Could create a function to plots the various graph to see the impact of modifying p_in or p_out.

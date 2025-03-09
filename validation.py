@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 
 from graph_generation import sbm_generation
 
-algorithms = ["bayesian", "spectral", "leiden", "louvain"]
+algorithms = ["bayesian", "bayesian_fixed_K", "spectral", "leiden", "louvain"]
 possible_metrics = ["adjusted_mutual_info_score", "adjusted_rand_score", "v_measure_score","homogeneity_score"]
 # Other possible metric:
 #   - homogeneity_score
@@ -26,7 +26,7 @@ def compute_score(metric, algorithm, graphs):
     Returns:
         ind (dict()): return a dictionary of the wanted index for each graph
     """
-    assert algorithm in algorithms, "the algorithm must be ones that we implemented"
+    assert algorithm in algorithms, "The algorithm must be ones that we implemented."
     assert metric in possible_metrics
     
     metric_functions = {
@@ -47,6 +47,10 @@ def compute_score(metric, algorithm, graphs):
         if algorithm == "bayesian":
             from statistical import bayesianInf
             clusters = bayesianInf(graph)
+            predicted_clusters = clusters.a
+        elif algorithm == "bayesian_fixed_K":
+            from statistical import bayesianInfFixedK
+            clusters = bayesianInfFixedK(graph, len(set(true_clusters)))
             predicted_clusters = clusters.a
         
         elif algorithm == "spectral":
@@ -103,7 +107,7 @@ def validation(K: int=2, nb_probas: int=5, modify : str="out"):
     Returns:
         results (pd.DataFrame): Dataframe representing the average scores for each pairs.
     """
-    sbm_graphs = sbm_generation(K=K, nb_probas=nb_probas, modify=modify)
+    sbm_graphs, _ = sbm_generation(K=K, nb_probas=nb_probas, modify=modify)
     results = pd.DataFrame(index=possible_metrics, columns=algorithms)
     for algorithm in algorithms:
         for metric in possible_metrics:
@@ -119,14 +123,14 @@ def validation(K: int=2, nb_probas: int=5, modify : str="out"):
     return results
 
 
-def validation_range_K(range_K, nb_probas: int=5, modify: str="out", plot: bool=True):
-    """Complete the average score for all possible pairs (index, algorithm) for various number of true clusters.
+def validation_range_K(range_K, modify: str="out", plot: bool=True):
+    """Compute the score for all possible pairs (index, algorithm) for various number of true communities, tested on a single graph.
 
     Args:
         range_K (np.array): The different values of clusters we consider.
         nb_probas (int, optional): Number of graphs. Defaults to 5.
         modify (str, optional): Decide if we modify p_in or p_out. Defaults to "out".
-        plot (boolean, optional): if True, plot the results over range_K for each index. Defaults to True.
+        plot (boolean, optional): if True, plot the results over range_K for each score. Defaults to True.
 
     Returns:
         results (pd.DataFrame): Dataframe with multiple indexes (K, index) representing the average score for each pair.
@@ -137,21 +141,60 @@ def validation_range_K(range_K, nb_probas: int=5, modify: str="out", plot: bool=
     results = pd.DataFrame(index=multi_ind, columns=algorithms)
     
     for K in range_K:
-        sbm_graphs = sbm_generation(K=K, nb_probas=nb_probas, modify=modify)
+        sbm_graphs, _ = sbm_generation(K=K, nb_probas=1, modify=modify)
         for algorithm in algorithms:
             for metric in possible_metrics:
-                _, avg_score = compute_score(metric, algorithm, sbm_graphs)
-                results.loc[(K, metric), algorithm] = avg_score
+                score, _ = compute_score(metric, algorithm, sbm_graphs)
+                results.loc[(K, metric), algorithm] = score
         print(f"Completed K = {K}.")
     
     ## Save the results in a csv file
-    name_table = f"evaluations/scores_K{range_K[0]}to{range_K[-1]}_n{nb_probas}_p{modify}.csv"
+    name_table = f"evaluations/scores_K{range_K[0]}to{range_K[-1]}_p{modify}.csv"
     results.to_csv(name_table)
     print(f"Results saved at {name_table}!")
     
     if plot:
-        title = f"Community detection performance across different scores, using {nb_probas} SBM graphs modifying p_{modify}"
+        title = f"Community detection performance across different scores, using a SBM graph for various number of cluster K"
         plot_results_range_K(results, title)
+    
+    return results
+
+
+def validation_range_p(range_p: np.array=None, K: int=3, p: float=0.5, modify: str="out", plot: bool=True):
+    """Compute the average score for all possible pairs (index, algorithm) for a fixed number of true communities K, tested for various SBM graphs modifying p_in or p_out depending on modify.
+
+    Args:
+        range_p (np.array, optional): The different probability values we want to test out. Defaults to None.
+        K (int, optional): Number of true communities to consider. Defaults to 3.
+        p (float, optional): Fixed probabilities of the SBM graphs. Defaults to 0.5.
+        modify (str, optional): Define if we modify p_in or p_out. Defaults to "out".
+        plot (bool, optional): If True, plot the results over range_p for each score. Defaults to True.
+
+    Returns:
+        _type_: _description_
+    """
+    sbm_graphs, proba_range = sbm_generation(K=K, p=p, range_p=range_p, modify=modify)
+    
+    multi_ind = pd.MultiIndex.from_product(
+        [proba_range, possible_metrics], names=[f"p_{modify}", "Metric"]
+    )
+    results = pd.DataFrame(index=multi_ind, columns=algorithms)
+    
+    for p in proba_range:
+        for algorithm in algorithms:
+            for metric in possible_metrics:
+                _, avg_score = compute_score(metric, algorithm, sbm_graphs)
+                results.loc[(p, metric), algorithm] = avg_score
+        print(f"Completed p_{modify} = {p}.")
+    
+    ## Save the results in a csv file
+    name_table = f"evaluations/scores_K{K}_n{len(proba_range)}_p{modify}.csv"
+    results.to_csv(name_table)
+    print(f"Results saved at {name_table}!")
+    
+    if plot:
+        title = f"Community detection average performance for {K} communities across different scores, using {len(proba_range)} SBM graphs"
+        plot_results_range_p(results, modify, title)
     
     return results
 
@@ -163,7 +206,7 @@ def plot_results_range_K(results, title: str=None):
 
     f, axs = plt.subplots(1, len(metrics), figsize=(5 * len(metrics), 5), sharex=True, sharey=True)
 
-    if len(metrics) == 1: # if there is only one index
+    if len(metrics) == 1: 
         axs = [axs]
 
     for i, ind in enumerate(metrics):
@@ -172,9 +215,35 @@ def plot_results_range_K(results, title: str=None):
         for algo in algos:
             axs[i].plot(range_K, avg_scores[algo], marker='x', label=algo)
 
-        # Plot settings
         axs[i].set_title(ind.replace("_", " ").title())
         axs[i].set_xlabel("Number of Clusters (K)")
+        axs[i].set_ylabel("Score")
+        axs[i].legend()
+        axs[i].grid(True)
+        
+    f.suptitle(title, fontsize=14, fontweight="bold")
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_results_range_p(results, modify: str="out", title: str=None):
+    algos = results.columns 
+    metrics = results.index.get_level_values("Metric").unique()
+    range_p = results.index.get_level_values(f"p_{modify}").unique()  
+
+    f, axs = plt.subplots(1, len(metrics), figsize=(5 * len(metrics), 5), sharex=True, sharey=True)
+
+    if len(metrics) == 1: 
+        axs = [axs]
+
+    for i, metric in enumerate(metrics):
+        avg_scores = results.xs(metric, level="Metric")
+
+        for algo in algos:
+            axs[i].plot(range_p, avg_scores[algo], marker='x', label=algo)
+
+        axs[i].set_title(metric.replace("_", " ").title())
+        axs[i].set_xlabel("Probability p")
         axs[i].set_ylabel("Score")
         axs[i].legend()
         axs[i].grid(True)

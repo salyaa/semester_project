@@ -56,5 +56,3 @@ def spectral(G: nx.Graph, K: int, plot: bool=False):
         plot_clust(G, clusters)
 
     return clusters
-
-## Implement one using the non-backtracking matrix? Laplacian?
