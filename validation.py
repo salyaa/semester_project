@@ -1,6 +1,6 @@
 import numpy as np 
 import pandas as pd 
-from sklearn.metrics import adjusted_mutual_info_score, adjusted_rand_score, v_measure_score, homogeneity_score
+from sklearn.metrics import adjusted_mutual_info_score, adjusted_rand_score, v_measure_score, homogeneity_score, fowlkes_mallows_score
 import igraph as ig
 import networkx as nx
 import graph_tool.all as gt
@@ -9,7 +9,13 @@ import matplotlib.pyplot as plt
 from graph_generation import sbm_generation
 
 algorithms = ["bayesian", "bayesian_fixed_K", "spectral", "leiden", "louvain"]
-possible_metrics = ["adjusted_mutual_info_score", "adjusted_rand_score", "v_measure_score","homogeneity_score"]
+possible_metrics = [
+    "adjusted_mutual_info_score", 
+    "adjusted_rand_score", 
+    "v_measure_score",
+    "homogeneity_score",
+    "fowlkes_mallows_score"
+]
 # Other possible metric:
 #   - homogeneity_score
 #   - fowlkes_mallow_score
@@ -33,7 +39,8 @@ def compute_score(metric, algorithm, graphs):
         "adjusted_mutual_info_score": adjusted_mutual_info_score,
         "adjusted_rand_score": adjusted_rand_score,
         "v_measure_score": v_measure_score, #identical to normalized_mutual_info_score with the 'arithmetic' option for averaging.
-        "homogeneity_score": homogeneity_score
+        "homogeneity_score": homogeneity_score,
+        "fowlkes_mallows_score": fowlkes_mallows_score
     }
     compute_metric = metric_functions[metric] 
     
