@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 
 from graph_generation import sbm_generation
 
+
 algorithms = ["bayesian", "bayesian_fixed_K", "spectral", "leiden", "louvain"]
 possible_metrics = [
     "adjusted_mutual_info_score", 
@@ -16,9 +17,6 @@ possible_metrics = [
     "homogeneity_score",
     "fowlkes_mallows_score"
 ]
-# Other possible metric:
-#   - homogeneity_score
-#   - fowlkes_mallow_score
 
 
 def compute_score(metric, algorithm, graphs):
@@ -99,8 +97,9 @@ def compute_score(metric, algorithm, graphs):
         #print(f"{key}: Score = {ind:.5f}")
     avg_score = np.mean(list(output.values()))
     #print(f"\n Average score = {avg_ind}. \n")
+    std_score = np.std(list(output.values()))
     
-    return score, avg_score
+    return score, avg_score, std_score
 
 
 def validation(K: int=2, nb_probas: int=5, modify : str="out"):
@@ -118,7 +117,7 @@ def validation(K: int=2, nb_probas: int=5, modify : str="out"):
     results = pd.DataFrame(index=possible_metrics, columns=algorithms)
     for algorithm in algorithms:
         for metric in possible_metrics:
-            _, avg_score = compute_score(metric, algorithm, sbm_graphs)
+            _, avg_score, _ = compute_score(metric, algorithm, sbm_graphs)
             results.loc[metric, algorithm] = avg_score
     print(f"Average scores computed for K = {K} and {nb_probas} graphs!")
     
@@ -145,26 +144,28 @@ def validation_range_K(range_K, modify: str="out", plot: bool=True):
     multi_ind = pd.MultiIndex.from_product(
         [range_K, possible_metrics], names=["K", "Metric"]
     )
-    results = pd.DataFrame(index=multi_ind, columns=algorithms)
+    results_mean = pd.DataFrame(index=multi_ind, columns=algorithms)
+    results_std = pd.DataFrame(index=multi_ind, columns=algorithms)
     
     for K in range_K:
         sbm_graphs, _ = sbm_generation(K=K, nb_probas=1, modify=modify)
         for algorithm in algorithms:
             for metric in possible_metrics:
-                score, _ = compute_score(metric, algorithm, sbm_graphs)
-                results.loc[(K, metric), algorithm] = score
+                _, avg_score, std_score = compute_score(metric, algorithm, sbm_graphs)
+                results_mean.loc[(K, metric), algorithm] = avg_score
+                results_std.loc[(K, metric), algorithm] = std_score
         print(f"Completed K = {K}.")
     
     ## Save the results in a csv file
     name_table = f"evaluations/scores_K{range_K[0]}to{range_K[-1]}_p{modify}.csv"
-    results.to_csv(name_table)
+    results_mean.to_csv(name_table)
     print(f"Results saved at {name_table}!")
     
     if plot:
         title = f"Community detection performance across different scores, using a SBM graph for various number of cluster K"
-        plot_results_range_K(results, title)
+        plot_results_range_K(results_mean, results_std, title)
     
-    return results
+    return results_mean
 
 
 def validation_range_p(range_p: np.array=None, K: int=3, p: float=0.5, modify: str="out", plot: bool=True):
@@ -178,7 +179,7 @@ def validation_range_p(range_p: np.array=None, K: int=3, p: float=0.5, modify: s
         plot (bool, optional): If True, plot the results over range_p for each score. Defaults to True.
 
     Returns:
-        _type_: _description_
+        results (pd.DataFrame): Dataframe with multiple indexes (p, index) representing the average score for each pair.
     """
     sbm_graphs, proba_range = sbm_generation(K=K, p=p, range_p=range_p, modify=modify)
     
@@ -186,12 +187,14 @@ def validation_range_p(range_p: np.array=None, K: int=3, p: float=0.5, modify: s
         [proba_range, possible_metrics], names=[f"p_{modify}", "Metric"]
     )
     results = pd.DataFrame(index=multi_ind, columns=algorithms)
+    results_std = pd.DataFrame(index=multi_ind, columns=algorithms)
     
     for p in proba_range:
         for algorithm in algorithms:
             for metric in possible_metrics:
-                _, avg_score = compute_score(metric, algorithm, sbm_graphs)
+                _, avg_score, std_score = compute_score(metric, algorithm, sbm_graphs)
                 results.loc[(p, metric), algorithm] = avg_score
+                results_std.loc[(p, metric), algorithm] = std_score
         print(f"Completed p_{modify} = {p}.")
     
     ## Save the results in a csv file
@@ -201,15 +204,15 @@ def validation_range_p(range_p: np.array=None, K: int=3, p: float=0.5, modify: s
     
     if plot:
         title = f"Community detection average performance for {K} communities across different scores, using {len(proba_range)} SBM graphs"
-        plot_results_range_p(results, modify, title)
+        plot_results_range_p(results, results_std, modify, title)
     
     return results
 
 
-def plot_results_range_K(results, title: str=None):
-    algos = results.columns 
-    metrics = results.index.get_level_values("Metric").unique()
-    range_K = results.index.get_level_values("K").unique()  
+def plot_results_range_K(results_mean, results_std, title: str=None):
+    algos = results_mean.columns 
+    metrics = results_mean.index.get_level_values("Metric").unique()
+    range_K = results_mean.index.get_level_values("K").unique()  
 
     f, axs = plt.subplots(1, len(metrics), figsize=(5 * len(metrics), 5), sharex=True, sharey=True)
 
@@ -217,10 +220,17 @@ def plot_results_range_K(results, title: str=None):
         axs = [axs]
 
     for i, ind in enumerate(metrics):
-        avg_scores = results.xs(ind, level="Metric")
+        avg_scores = results_mean.xs(ind, level="Metric")ß
+        std_scores = results_std.xs(ind, level="Metric")
 
         for algo in algos:
-            axs[i].plot(range_K, avg_scores[algo], marker='x', label=algo)
+            mean_values = avg_scores[algo].astype(float)
+            std_values = std_scores[algo].astype(float)
+            
+            std_values = np.nan_to_num(std_values, nan=0.0)
+
+            axs[i].plot(range_K, mean_values, marker='o', label=algo)
+            axs[i].fill_between(range_K, mean_values - std_values, mean_values + std_values, alpha=0.2)
 
         axs[i].set_title(ind.replace("_", " ").title())
         axs[i].set_xlabel("Number of Clusters (K)")
@@ -233,10 +243,11 @@ def plot_results_range_K(results, title: str=None):
     plt.show()
 
 
-def plot_results_range_p(results, modify: str="out", title: str=None):
-    algos = results.columns 
-    metrics = results.index.get_level_values("Metric").unique()
-    range_p = results.index.get_level_values(f"p_{modify}").unique()  
+
+def plot_results_range_p(results_mean, results_std, modify: str="out", title: str=None):
+    algos = results_mean.columns 
+    metrics = results_mean.index.get_level_values("Metric").unique()
+    range_p = results_mean.index.get_level_values(f"p_{modify}").unique()  
 
     f, axs = plt.subplots(1, len(metrics), figsize=(5 * len(metrics), 5), sharex=True, sharey=True)
 
@@ -244,10 +255,17 @@ def plot_results_range_p(results, modify: str="out", title: str=None):
         axs = [axs]
 
     for i, metric in enumerate(metrics):
-        avg_scores = results.xs(metric, level="Metric")
+        avg_scores = results_mean.xs(metric, level="Metric")
+        std_scores = results_std.xs(metric, level="Metric")
 
         for algo in algos:
-            axs[i].plot(range_p, avg_scores[algo], marker='x', label=algo)
+            mean_values = avg_scores[algo].astype(float) 
+            std_values = std_scores[algo].astype(float)  
+
+            std_values = np.nan_to_num(std_values, nan=0.0) 
+
+            axs[i].plot(range_p, mean_values, marker='o', label=algo)
+            axs[i].fill_between(range_p, mean_values - std_values, mean_values + std_values, alpha=0.2)
 
         axs[i].set_title(metric.replace("_", " ").title())
         axs[i].set_xlabel("Probability p")
@@ -258,3 +276,4 @@ def plot_results_range_p(results, modify: str="out", title: str=None):
     f.suptitle(title, fontsize=14, fontweight="bold")
     plt.tight_layout()
     plt.show()
+    
