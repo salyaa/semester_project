@@ -1,7 +1,7 @@
 import graph_tool.all as gt 
 import numpy as np
 
-def sbm_generation(n: int = 500, K: int = 3, p: float = 0.5, nb_probas: int = 8, range_p: np.array=None, modify: str = "out"):
+def sbm_generation(n: int = 500, K: int = 3, nb_probas: int = 8, range_p: np.array=None, modify: str = "out"):
     """
     Generate multiple SBM graphs while modifying either p_in or p_out.
 
@@ -16,9 +16,11 @@ def sbm_generation(n: int = 500, K: int = 3, p: float = 0.5, nb_probas: int = 8,
     - graphs (dict): A dictionary containing SBM graphs with different p values.
     """
     
-    assert 0 <= p <= 1, "p must be between 0 and 1"
     assert modify in ["in", "out"], "modify must be 'in' or 'out'"
     assert K>2, "need at least 3 clusters"
+    assert n > K
+    
+    p = np.log(n)/n
 
     ## Distribute evenly nodes across communities
     group_sizes = [n // K] * K
@@ -28,11 +30,11 @@ def sbm_generation(n: int = 500, K: int = 3, p: float = 0.5, nb_probas: int = 8,
     
     if range_p is None:
         if nb_probas == 1:
-            range_p = [0.5]
+            range_p = [np.log(n)/n]
         elif nb_probas == 2:
-            range_p = [0.25, 0.75]
+            range_p = [np.log(n)/(3*n), np.log(n)/(2*n)]
         else:
-            range_p = np.linspace(0, 1, num=nb_probas, endpoint=False)
+            range_p = np.linspace(0, p, num=nb_probas, endpoint=True)
     
     graphs = {}
     for i, p_mod in enumerate(range_p):

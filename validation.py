@@ -168,20 +168,19 @@ def validation_range_K(range_K, modify: str="out", plot: bool=True):
     return results_mean
 
 
-def validation_range_p(range_p: np.array=None, K: int=3, p: float=0.5, modify: str="out", plot: bool=True):
+def validation_range_p(range_p: np.array=None, K: int=3, modify: str="out", plot: bool=True):
     """Compute the average score for all possible pairs (index, algorithm) for a fixed number of true communities K, tested for various SBM graphs modifying p_in or p_out depending on modify.
 
     Args:
         range_p (np.array, optional): The different probability values we want to test out. Defaults to None.
         K (int, optional): Number of true communities to consider. Defaults to 3.
-        p (float, optional): Fixed probabilities of the SBM graphs. Defaults to 0.5.
         modify (str, optional): Define if we modify p_in or p_out. Defaults to "out".
         plot (bool, optional): If True, plot the results over range_p for each score. Defaults to True.
 
     Returns:
         results (pd.DataFrame): Dataframe with multiple indexes (p, index) representing the average score for each pair.
     """
-    sbm_graphs, proba_range = sbm_generation(K=K, p=p, range_p=range_p, modify=modify)
+    sbm_graphs, proba_range = sbm_generation(K=K, range_p=range_p, modify=modify)
     
     multi_ind = pd.MultiIndex.from_product(
         [proba_range, possible_metrics], names=[f"p_{modify}", "Metric"]
@@ -209,6 +208,49 @@ def validation_range_p(range_p: np.array=None, K: int=3, p: float=0.5, modify: s
     return results
 
 
+def validation_range_n(range_n: np.array=None, K: int=3, modify: str="out", plot: bool=True):
+    """Compute the average score for all possible pairs (index, algorithm) for a fixed number of true communities K, tested for various SBM graphs modifying the number of nodes n.
+
+    Args:
+        range_n (np.array, optional): The different number of nodes we want to test out. Defaults to None.
+        K (int, optional): Number of true communities to consider. Defaults to 3.
+        modify (str, optional): Define if we modify p_in or p_out. Defaults to "out".
+        plot (bool, optional): If True, plot the results over range_p for each score. Defaults to True.
+
+    Returns:
+        results (pd.DataFrame): Dataframe with multiple indexes (p, index) representing the average score for each pair.
+    """
+    if range_n is None:
+        range_n = np.linspace(100*K, 1000*K, 10, dtype=np.int32)
+    print(range_n)
+    
+    multi_ind = pd.MultiIndex.from_product(
+        [range_n, possible_metrics], names=["n", "Metric"]
+    )
+    results = pd.DataFrame(index=multi_ind, columns=algorithms)
+    results_std = pd.DataFrame(index=multi_ind, columns=algorithms)
+    
+    for n in range_n:
+        sbm_graphs, _ = sbm_generation(n=n, K=K, nb_probas=1, modify=modify)
+        for algorithm in algorithms:
+            for metric in possible_metrics:
+                _, avg_score, std_score = compute_score(metric, algorithm, sbm_graphs)
+                results.loc[(n, metric), algorithm] = avg_score
+                results_std.loc[(n, metric), algorithm] = std_score
+        print(f"Completed n = {n}.")
+        
+    ## Save the results in a csv file
+    name_table = f"evaluations/scores_K{K}_n_from{range_n[0]}to{range_n[-1]}_p{modify}.csv"
+    results.to_csv(name_table)
+    print(f"Results saved at {name_table}!")
+    
+    if plot:
+        title = f"Community detection average performance for {K} communities across different scores, using SBM graphs varying the number of nodes n"
+        plot_results_range_n(results, results_std, modify, title)
+    
+    return results
+
+
 def plot_results_range_K(results_mean, results_std, title: str=None):
     algos = results_mean.columns 
     metrics = results_mean.index.get_level_values("Metric").unique()
@@ -220,7 +262,7 @@ def plot_results_range_K(results_mean, results_std, title: str=None):
         axs = [axs]
 
     for i, ind in enumerate(metrics):
-        avg_scores = results_mean.xs(ind, level="Metric")ß
+        avg_scores = results_mean.xs(ind, level="Metric")
         std_scores = results_std.xs(ind, level="Metric")
 
         for algo in algos:
@@ -229,7 +271,7 @@ def plot_results_range_K(results_mean, results_std, title: str=None):
             
             std_values = np.nan_to_num(std_values, nan=0.0)
 
-            axs[i].plot(range_K, mean_values, marker='o', label=algo)
+            axs[i].plot(range_K, mean_values, marker='x', label=algo)
             axs[i].fill_between(range_K, mean_values - std_values, mean_values + std_values, alpha=0.2)
 
         axs[i].set_title(ind.replace("_", " ").title())
@@ -241,7 +283,6 @@ def plot_results_range_K(results_mean, results_std, title: str=None):
     f.suptitle(title, fontsize=14, fontweight="bold")
     plt.tight_layout()
     plt.show()
-
 
 
 def plot_results_range_p(results_mean, results_std, modify: str="out", title: str=None):
@@ -264,11 +305,45 @@ def plot_results_range_p(results_mean, results_std, modify: str="out", title: st
 
             std_values = np.nan_to_num(std_values, nan=0.0) 
 
-            axs[i].plot(range_p, mean_values, marker='o', label=algo)
+            axs[i].plot(range_p, mean_values, marker='x', label=algo)
             axs[i].fill_between(range_p, mean_values - std_values, mean_values + std_values, alpha=0.2)
 
         axs[i].set_title(metric.replace("_", " ").title())
         axs[i].set_xlabel("Probability p")
+        axs[i].set_ylabel("Score")
+        axs[i].legend()
+        axs[i].grid(True)
+        
+    f.suptitle(title, fontsize=14, fontweight="bold")
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_results_range_n(results_mean, results_std, modify: str="out", title: str=None):
+    algos = results_mean.columns 
+    metrics = results_mean.index.get_level_values("Metric").unique()
+    range_n = results_mean.index.get_level_values(f"n").unique()  
+
+    f, axs = plt.subplots(1, len(metrics), figsize=(5 * len(metrics), 5), sharex=True, sharey=True)
+
+    if len(metrics) == 1: 
+        axs = [axs]
+
+    for i, metric in enumerate(metrics):
+        avg_scores = results_mean.xs(metric, level="Metric")
+        std_scores = results_std.xs(metric, level="Metric")
+
+        for algo in algos:
+            mean_values = avg_scores[algo].astype(float) 
+            std_values = std_scores[algo].astype(float)  
+
+            std_values = np.nan_to_num(std_values, nan=0.0) 
+
+            axs[i].plot(range_n, mean_values, marker='x', label=algo)
+            axs[i].fill_between(range_n, mean_values - std_values, mean_values + std_values, alpha=0.2)
+
+        axs[i].set_title(metric.replace("_", " ").title())
+        axs[i].set_xlabel("Number of nodes n")
         axs[i].set_ylabel("Score")
         axs[i].legend()
         axs[i].grid(True)
