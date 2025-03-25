@@ -6,7 +6,7 @@ import networkx as nx
 import graph_tool.all as gt
 import matplotlib.pyplot as plt
 
-from graph_generation import sbm_generation
+from sbm_generation import sbm_generation
 
 
 algorithms = ["bayesian", "bayesian_fixed_K", "spectral", "leiden", "louvain"]

@@ -1,6 +1,6 @@
 import time 
 import pandas as pd 
-from graph_generation import *
+from sbm_generation import *
 from validation import *
 import matplotlib.pyplot as plt 
 
