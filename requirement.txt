@@ -5,5 +5,5 @@ sklearn
 numpy
 scipy
 matplotlib
-cmake
-networkit
+juliacall
+yaml

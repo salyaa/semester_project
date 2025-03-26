@@ -1,6 +1,6 @@
 import time 
 import pandas as pd 
-from sbm_generation import *
+from SBM.sbm_generation import *
 from validation import *
 import matplotlib.pyplot as plt 
 
