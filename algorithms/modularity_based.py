@@ -1,10 +1,7 @@
 import igraph as ig 
 import matplotlib.pyplot as plt
-import louvain as lv
 
-# Create the pipeline for the modularity based community detection
-
-# If we want to plot the graph with the different clusters, use this:
+# If we want to plot the graph with the different clusters, use this function:
 def plot_clusters(G: ig.Graph, clusters):
     layout = G.layout('kk')
     K = len(clusters)
@@ -24,10 +21,9 @@ def plot_clusters(G: ig.Graph, clusters):
     )
     plt.show()
 
-
 def louvain(G: ig.Graph, plot : bool = False):
     # https://github.com/vtraag/louvain-igraph?tab=readme-ov-file
-    """Find the communities of an igraph graph G using the Louvain algorithm
+    """Find the communities of an igraph.Graph G using the Louvain algorithm
 
     Args:
         G (igraph.Graph)
@@ -41,9 +37,8 @@ def louvain(G: ig.Graph, plot : bool = False):
         plot_clusters(G, clusters)
     return clusters
 
-
-def leiden(G: ig.Graph, plot: bool=False, n: int=1000):
-    """Find the communities of an igraph graph G using the Leiden algorithm
+def leiden(G: ig.Graph, plot: bool=False, n: int=2):
+    """Find the communities of an igraph.Graph G using the Leiden algorithm
 
     Args:
         G (igraph.Graph)
@@ -54,8 +49,6 @@ def leiden(G: ig.Graph, plot: bool=False, n: int=1000):
         VertexClustering object from igraph
     """
     clusters = G.community_leiden(n_iterations=n, objective_function="modularity")
-    
     if plot:
         plot_clusters(G, clusters)
-    
     return clusters

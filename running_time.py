@@ -32,7 +32,7 @@ def compute_running_time(metric, algorithm, graphs, n_runs: int=10):
     times = []
     for _ in range(n_runs):
         start = time.time()
-        _, _, _ = compute_score(metric, algorithm, graphs)
+        _, _, _, _ = compute_score(metric, algorithm, graphs)
         times.append(time.time() - start)
     avg_time = np.mean(times)
     return avg_time

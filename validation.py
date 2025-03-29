@@ -7,6 +7,7 @@ import graph_tool.all as gt
 import matplotlib.pyplot as plt
 
 from SBM.sbm_generation import sbm_generation
+from ABCD.abcd_generation import *
 
 
 algorithms = ["bayesian", "bayesian_fixed_K", "spectral", "leiden", "louvain"]
@@ -17,9 +18,10 @@ possible_metrics = [
     "homogeneity_score",
     "fowlkes_mallows_score"
 ]
+graph_types = ["sbm", "abcd"]
 
 
-def compute_score(metric, algorithm, graphs):
+def compute_score(metric, algorithm, graphs, graph_type: str="sbm"):
     """Compute a given index for a dictionary of graphs
 
     Args:
@@ -31,10 +33,11 @@ def compute_score(metric, algorithm, graphs):
         score (dict()): return a dictionary of the wanted score for each graph
         avg_score (float): return the average score
         std_score (float): return the standard deviation
-        number_clusters_found (int): number of clusters inferred by the algorithm, useful to compare it with the real number of clusters
+        number_clusters_found (dict()): number of clusters inferred by the algorithm, useful to compare it with the real number of clusters
     """
-    assert algorithm in algorithms, "The algorithm must be ones that we implemented."
+    assert algorithm in algorithms, "The algorithm must be one that we implemented."
     assert metric in possible_metrics, "The metric must be one that we selected."
+    assert graph_type in graph_types, "The type of graph must be one that we implemented."
     
     metric_functions = {
         "adjusted_mutual_info_score": adjusted_mutual_info_score,
@@ -46,55 +49,52 @@ def compute_score(metric, algorithm, graphs):
     compute_metric = metric_functions[metric] 
     
     output = dict()
-    number_clusters_found = 0
+    number_clusters_found = {}
     
     for key, graph in graphs.items():
         true_clusters = graph.vp["block"].a
+        
         #useful for graph conversion
-        graph_edges = [(int(e.source()), int(e.target())) for e in graph.edges()]
-        
-        if algorithm == "bayesian":
-            from statistical import bayesianInf
-            clusters = bayesianInf(graph)
-            predicted_clusters = clusters.a
-            number_clusters_found = len(np.unique(predicted_clusters))
-        elif algorithm == "bayesian_fixed_K":
-            from statistical import bayesianInfFixedK
-            clusters = bayesianInfFixedK(graph, len(set(true_clusters)))
-            predicted_clusters = clusters.a
-            number_clusters_found = len(np.unique(predicted_clusters))
-        
+        if isinstance(graph, gt.Graph):
+            graph_edges = [(int(e.source()), int(e.target())) for e in graph.edges()]
+        else: 
+            graph_edges = graph.get_edgelist()
+
+        if algorithm in ["bayesian", "bayesian_fixed_K"]:
+            from algorithms.statistical import bayesianInf, bayesianInfFixedK
+            if algorithm == "bayesian":
+                if isinstance(graph, ig.Graph):
+                    gt_graph = gt.Graph(directed=False)
+                    gt_graph.add_vertex(graph.vcount())
+                    gt_graph.add_edge_list(graph.get_edgelist())
+                    graph = gt_graph
+                clusters = bayesianInf(graph)
+            else:
+                clusters = bayesianInfFixedK(graph, len(set(true_clusters)))
+            predicted_clusters = clusters.a 
+            
         elif algorithm == "spectral":
-            from spectral import spectral
-            ## Need to convert gt.Graph into nx.Graph
+            from algorithms.spectral import spectral
             graph_nx = nx.Graph()
             node_mapping = {v: i for i, v in enumerate(graph.vertices())}
             graph_nx.add_nodes_from(node_mapping.values())
             graph_nx.add_edges_from([(node_mapping[int(e.source())], node_mapping[int(e.target())]) for e in graph.edges()])
-            ## Need the graph to be connected... in case it is not do this:
             if not nx.is_connected(graph_nx):
-                #print(f"Warning: {key} is not fully connected. Use the largest connected component.")
                 lcc = max(nx.connected_components(graph_nx), key=len)
                 graph_nx = graph_nx.subgraph(lcc).copy()
-                
                 true_clusters = np.array([true_clusters[node] for node in graph_nx.nodes()])
-            
             predicted_clusters = spectral(graph_nx, K=len(set(true_clusters)))
-            number_clusters_found = len(np.unique(predicted_clusters))
         
-        else:
+        elif algorithm in ["louvain", "leiden"]: # leiden and louvain
             ## Need to convert gt.Graph into ig.Graph
             graph_ig = ig.Graph()
             graph_ig.add_vertices(n=graph.num_vertices())
             graph_ig.add_edges(graph_edges)
             
-            from modularity_based import louvain, leiden
-            if algorithm == "louvain":
-                clusters = louvain(graph_ig)
-            else: # algorithm == "leiden"
-                clusters = leiden(graph_ig)
+            from algorithms.modularity_based import louvain, leiden
+            method = leiden if algorithm == "leiden" else louvain
+            clusters = method(graph_ig)
             predicted_clusters = clusters.membership
-            number_clusters_found = len(np.unique(predicted_clusters))
         
         # Had issue with graph conversion, so test this:
         if len(true_clusters) != len(predicted_clusters):
@@ -102,61 +102,131 @@ def compute_score(metric, algorithm, graphs):
         
         score = compute_metric(true_clusters, predicted_clusters)
         output[key] = score
-        #print(f"{key}: Score = {ind:.5f}")
+        number_clusters_found[key] = len(np.unique(predicted_clusters))
+
     avg_score = np.mean(list(output.values()))
-    #print(f"\n Average score = {avg_ind}. \n")
     std_score = np.std(list(output.values()))
     
     return score, avg_score, std_score, number_clusters_found
 
-
-def validation_range_K(range_K, modify: str="out", plot: bool=True):
+def validation_range_K(range_K, modify: str="out", plot: bool=True, graph_type="sbm"):
     """Compute the score for all possible pairs (index, algorithm) for various number of true communities, tested on a single graph.
 
     Args:
         range_K (np.array): The different values of clusters we consider.
-        nb_probas (int, optional): Number of graphs. Defaults to 5.
         modify (str, optional): Decide if we modify p_in or p_out. Defaults to "out".
         plot (boolean, optional): if True, plot the results over range_K for each score. Defaults to True.
+        graph_type (str): "sbm" or "abcd"
 
     Returns:
         results (pd.DataFrame): Dataframe with multiple indexes (K, index) representing the average score for each pair.
         number_clusters (pd.DataFrame): Dataframe with the number of clusters found for each algorithm for a given true K.
     """
+    import pandas as pd
+    import numpy as np
+
     multi_ind = pd.MultiIndex.from_product(
         [range_K, possible_metrics], names=["K", "Metric"]
     )
     results_mean = pd.DataFrame(index=multi_ind, columns=algorithms)
     results_std = pd.DataFrame(index=multi_ind, columns=algorithms)
-    
+
     number_clusters = pd.DataFrame(index=range_K, columns=algorithms)
-    
+
     for K in range_K:
-        sbm_graphs, _ = sbm_generation(K=K, nb_probas=1, modify=modify)
+        if graph_type == "sbm":
+            graphs, _ = sbm_generation(K=K, nb_probas=1, modify=modify)
+        elif graph_type == "abcd":
+            graphs = abcd_equal_size_range_K(range_K=[K])
+        else:
+            raise ValueError("Invalid graph type. Must be 'sbm' or 'abcd'.")
+
         for algorithm in algorithms:
-            k_algo_avg = []
+            all_cluster_counts = {}
+
             for metric in possible_metrics:
-                _, avg_score, std_score, k = compute_score(metric, algorithm, sbm_graphs)
+                _, avg_score, std_score, cluster_dict = compute_score(
+                    metric, algorithm, graphs, graph_type=graph_type
+                )
                 results_mean.loc[(K, metric), algorithm] = avg_score
                 results_std.loc[(K, metric), algorithm] = std_score
-                k_algo_avg.append(k)
-            number_clusters.loc[K, algorithm] = np.mean(k_algo_avg)
+
+                # Store number of clusters found for each graph
+                for gname, count in cluster_dict.items():
+                    if gname not in all_cluster_counts:
+                        all_cluster_counts[gname] = []
+                    all_cluster_counts[gname].append(count)
+
+            # Compute average number of clusters per graph, then average across graphs
+            avg_cluster_counts = [np.mean(counts) for counts in all_cluster_counts.values()]
+            number_clusters.loc[K, algorithm] = np.mean(avg_cluster_counts)
+
         print(f"Completed K = {K}.")
-    
+
     ## Save the results in a csv file
-    name_table = f"evaluations/scores_K{range_K[0]}to{range_K[-1]}_p{modify}.csv"
+    name_table = f"evaluations/scores_K{range_K[0]}to{range_K[-1]}_{graph_type}_p{modify}.csv"
     results_mean.to_csv(name_table)
     print(f"Results saved at {name_table}!")
-    
+
     if plot:
-        title = f"Community detection performance across different scores, using a SBM graph for various number of cluster K"
+        title = f"Community detection performance across different scores ({graph_type.upper()}), varying K"
         plot_results_range_K(results_mean, results_std, title, number_clusters)
         plot_inferred_K(number_clusters, range_K)
-    
+
     return results_mean, number_clusters
 
+# def validation_range_K(range_K, n:int=1000, modify: str="out", graph_type: str="sbm", plot: bool=True):
+#     """Compute the score for all possible pairs (index, algorithm) for various number of true communities, tested on a single graph.
 
-def validation_range_p(range_p: np.array=None, K: int=3, modify: str="out", plot: bool=True):
+#     Args:
+#         range_K (np.array): The different values of clusters we consider.
+#         n (int): Number of nodes in the graph.
+#         nb_probas (int, optional): Number of graphs. Defaults to 5.
+#         modify (str, optional): Decide if we modify p_in or p_out. Defaults to "out".
+#         plot (boolean, optional): if True, plot the results over range_K for each score. Defaults to True.
+
+#     Returns:
+#         results (pd.DataFrame): Dataframe with multiple indexes (K, index) representing the average score for each pair.
+#         number_clusters (pd.DataFrame): Dataframe with the number of clusters found for each algorithm for a given true K.
+#     """
+#     multi_ind = pd.MultiIndex.from_product(
+#         [range_K, possible_metrics], names=["K", "Metric"]
+#     )
+#     results_mean = pd.DataFrame(index=multi_ind, columns=algorithms)
+#     results_std = pd.DataFrame(index=multi_ind, columns=algorithms)
+    
+#     number_clusters = pd.DataFrame(index=range_K, columns=algorithms)
+    
+#     for K in range_K:
+#         if graph_type == "sbm":
+#             graphs, _ = sbm_generation(n=n, K=K, nb_probas=1, modify=modify)
+#         elif graph_type == "abcd":
+#             assert n%K == 0, f"n={n} must be divisible by K={K} for equal-sized communities."
+#             graphs, _ = abcd_generation(f"graph_K={K}", K=K, n=n)
+#         for algorithm in algorithms:
+#             k_algo_avg = []
+#             for metric in possible_metrics:
+#                 _, avg_score, std_score, k = compute_score(metric, algorithm, graphs)
+#                 results_mean.loc[(K, metric), algorithm] = avg_score
+#                 results_std.loc[(K, metric), algorithm] = std_score
+#                 k_algo_avg.append(k)
+#             number_clusters.loc[K, algorithm] = np.mean(k_algo_avg)
+#         print(f"Completed K = {K}.")
+    
+#     ## Save the results in a csv file
+#     name_table = f"evaluations/scores_K{range_K[0]}to{range_K[-1]}_p{modify}.csv"
+#     results_mean.to_csv(name_table)
+#     print(f"Results saved at {name_table}!")
+    
+#     if plot:
+#         title = f"Community detection performance across different scores, using a {graph_type.upper()} graph for various number of cluster K"
+#         plot_results_range_K(results_mean, results_std, title, number_clusters)
+#         plot_inferred_K(number_clusters, range_K)
+    
+#     return results_mean, number_clusters
+
+
+def validation_range_p(range_p: np.array=None, K: int=5, n:int=1000, modify: str="out", graph_type: str="sbm", plot: bool=True):
     """Compute the average score for all possible pairs (index, algorithm) for a fixed number of true communities K, tested for various SBM graphs modifying p_in or p_out depending on modify.
 
     Args:
@@ -169,8 +239,10 @@ def validation_range_p(range_p: np.array=None, K: int=3, modify: str="out", plot
         results (pd.DataFrame): Dataframe with multiple indexes (p, index) representing the average score for each pair.
         number_clusters (pd.DataFrame): Dataframe with the number of clusters found for each algorithm for a given true K, for each probability value we considered.
     """
-    sbm_graphs, proba_range = sbm_generation(K=K, range_p=range_p, modify=modify)
-    
+    if graph_type == "sbm":
+        graphs, proba_range = sbm_generation(K=K, range_p=range_p, modify=modify)
+    elif graph_type == "abcd":
+        graphs, proba_range = abcd_equal_size_range_xi(n=n, K=K)
     multi_ind = pd.MultiIndex.from_product(
         [proba_range, possible_metrics], names=[f"p_{modify}", "Metric"]
     )
@@ -183,7 +255,7 @@ def validation_range_p(range_p: np.array=None, K: int=3, modify: str="out", plot
         for algorithm in algorithms:
             k_algo_avg = []
             for metric in possible_metrics:
-                _, avg_score, std_score, k = compute_score(metric, algorithm, sbm_graphs)
+                _, avg_score, std_score, k = compute_score(metric, algorithm, graphs)
                 results.loc[(p, metric), algorithm] = avg_score
                 results_std.loc[(p, metric), algorithm] = std_score
                 k_algo_avg.append(k)
@@ -196,14 +268,14 @@ def validation_range_p(range_p: np.array=None, K: int=3, modify: str="out", plot
     print(f"Results saved at {name_table}!")
     
     if plot:
-        title = f"Community detection average performance for {K} communities across different scores, using {len(proba_range)} SBM graphs"
+        title = f"Community detection average performance for {K} communities across different scores, using {len(proba_range)} {graph_type.upper()} graphs"
         plot_results_range_p(results, results_std, modify, title)
         plot_inferred_K_fixed_param(number_clusters, proba_range, f"p_{modify}", K, f"Inferred Clusters vs p_{modify} (K={K})")
     
     return results, number_clusters
 
 
-def validation_range_n(range_n: np.array=None, K: int=3, modify: str="out", plot: bool=True):
+def validation_range_n(range_n: np.array=None, K: int=3, modify: str="out", graph_type: str="sbm", plot: bool=True):
     """Compute the average score for all possible pairs (index, algorithm) for a fixed number of true communities K, tested for various SBM graphs modifying the number of nodes n.
 
     Args:
@@ -229,11 +301,15 @@ def validation_range_n(range_n: np.array=None, K: int=3, modify: str="out", plot
     number_clusters = pd.DataFrame(index=range_n, columns=algorithms)
     
     for n in range_n:
-        sbm_graphs, _ = sbm_generation(n=n, K=K, nb_probas=1, modify=modify)
+        assert n%K == 0
+        if graph_type == "sbm":
+            graphs, _ = sbm_generation(n=n, K=K, nb_probas=1, modify=modify)
+        elif graph_type=="abcd":
+            graphs, _ = abcd_generation(f"graph_n={n}", K=K, n=n)
         for algorithm in algorithms:
             k_algo_avg = []
             for metric in possible_metrics:
-                _, avg_score, std_score, k = compute_score(metric, algorithm, sbm_graphs)
+                _, avg_score, std_score, k = compute_score(metric, algorithm, graphs)
                 results.loc[(n, metric), algorithm] = avg_score
                 results_std.loc[(n, metric), algorithm] = std_score
                 k_algo_avg.append(k)
