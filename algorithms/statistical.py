@@ -61,7 +61,7 @@ def bayesianInfFixedK(G: gt.Graph, K: int=5, seed: int = 42, plot: bool = False)
     assert K >= 3
     
     if seed is not None:
-        np.random.seed(seed)  # Fixes randomness for inference
+        np.random.seed(seed)
 
     state = gt.minimize_blockmodel_dl(G, state_args=dict(B=K, deg_corr=True))
     state.mcmc_sweep(niter=100)

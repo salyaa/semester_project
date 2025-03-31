@@ -1,7 +1,7 @@
 import graph_tool.all as gt 
 import numpy as np
 
-def sbm_generation(n: int = 500, K: int = 3, nb_probas: int = 5, range_p: np.array=None, modify: str = "out"):
+def sbm_generation(n: int = 1000, K: int = 3, nb_probas: int = 5, range_p: np.array=None, modify: str = "out"):
     """
     Generate multiple SBM graphs while modifying either p_in or p_out.
 

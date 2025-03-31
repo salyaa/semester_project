@@ -48,7 +48,7 @@ def compute_score(metric, algorithm, graphs, graph_type: str="sbm"):
     }
     compute_metric = metric_functions[metric] 
     
-    output = dict()
+    scores = dict()
     number_clusters_found = {}
     
     for key, graph in graphs.items():
@@ -101,13 +101,13 @@ def compute_score(metric, algorithm, graphs, graph_type: str="sbm"):
             raise ValueError(f"Size mismatch: True labels ({len(true_clusters)}) vs. Predicted labels ({len(predicted_clusters)}) in {key}")
         
         score = compute_metric(true_clusters, predicted_clusters)
-        output[key] = score
+        scores[key] = score
         number_clusters_found[key] = len(np.unique(predicted_clusters))
 
-    avg_score = np.mean(list(output.values()))
-    std_score = np.std(list(output.values()))
+    avg_score = np.mean(list(scores.values()))
+    std_score = np.std(list(scores.values()))
     
-    return score, avg_score, std_score, number_clusters_found
+    return scores, avg_score, std_score, number_clusters_found
 
 def validation_range_K(range_K, modify: str="out", plot: bool=True, graph_type="sbm"):
     """Compute the score for all possible pairs (index, algorithm) for various number of true communities, tested on a single graph.
@@ -122,8 +122,6 @@ def validation_range_K(range_K, modify: str="out", plot: bool=True, graph_type="
         results (pd.DataFrame): Dataframe with multiple indexes (K, index) representing the average score for each pair.
         number_clusters (pd.DataFrame): Dataframe with the number of clusters found for each algorithm for a given true K.
     """
-    import pandas as pd
-    import numpy as np
 
     multi_ind = pd.MultiIndex.from_product(
         [range_K, possible_metrics], names=["K", "Metric"]
@@ -175,103 +173,67 @@ def validation_range_K(range_K, modify: str="out", plot: bool=True, graph_type="
 
     return results_mean, number_clusters
 
-# def validation_range_K(range_K, n:int=1000, modify: str="out", graph_type: str="sbm", plot: bool=True):
-#     """Compute the score for all possible pairs (index, algorithm) for various number of true communities, tested on a single graph.
-
-#     Args:
-#         range_K (np.array): The different values of clusters we consider.
-#         n (int): Number of nodes in the graph.
-#         nb_probas (int, optional): Number of graphs. Defaults to 5.
-#         modify (str, optional): Decide if we modify p_in or p_out. Defaults to "out".
-#         plot (boolean, optional): if True, plot the results over range_K for each score. Defaults to True.
-
-#     Returns:
-#         results (pd.DataFrame): Dataframe with multiple indexes (K, index) representing the average score for each pair.
-#         number_clusters (pd.DataFrame): Dataframe with the number of clusters found for each algorithm for a given true K.
-#     """
-#     multi_ind = pd.MultiIndex.from_product(
-#         [range_K, possible_metrics], names=["K", "Metric"]
-#     )
-#     results_mean = pd.DataFrame(index=multi_ind, columns=algorithms)
-#     results_std = pd.DataFrame(index=multi_ind, columns=algorithms)
-    
-#     number_clusters = pd.DataFrame(index=range_K, columns=algorithms)
-    
-#     for K in range_K:
-#         if graph_type == "sbm":
-#             graphs, _ = sbm_generation(n=n, K=K, nb_probas=1, modify=modify)
-#         elif graph_type == "abcd":
-#             assert n%K == 0, f"n={n} must be divisible by K={K} for equal-sized communities."
-#             graphs, _ = abcd_generation(f"graph_K={K}", K=K, n=n)
-#         for algorithm in algorithms:
-#             k_algo_avg = []
-#             for metric in possible_metrics:
-#                 _, avg_score, std_score, k = compute_score(metric, algorithm, graphs)
-#                 results_mean.loc[(K, metric), algorithm] = avg_score
-#                 results_std.loc[(K, metric), algorithm] = std_score
-#                 k_algo_avg.append(k)
-#             number_clusters.loc[K, algorithm] = np.mean(k_algo_avg)
-#         print(f"Completed K = {K}.")
-    
-#     ## Save the results in a csv file
-#     name_table = f"evaluations/scores_K{range_K[0]}to{range_K[-1]}_p{modify}.csv"
-#     results_mean.to_csv(name_table)
-#     print(f"Results saved at {name_table}!")
-    
-#     if plot:
-#         title = f"Community detection performance across different scores, using a {graph_type.upper()} graph for various number of cluster K"
-#         plot_results_range_K(results_mean, results_std, title, number_clusters)
-#         plot_inferred_K(number_clusters, range_K)
-    
-#     return results_mean, number_clusters
-
-
-def validation_range_p(range_p: np.array=None, K: int=5, n:int=1000, modify: str="out", graph_type: str="sbm", plot: bool=True):
-    """Compute the average score for all possible pairs (index, algorithm) for a fixed number of true communities K, tested for various SBM graphs modifying p_in or p_out depending on modify.
+def validation_range_p(range_p: np.array=None, K: int=3, n: int=1000, modify: str="out", graph_type: str="sbm", plot: bool=True):
+    """Compute the average score for all possible pairs (index, algorithm) for a fixed number of true communities K, tested for various SBM or ABCD graphs modifying p_in or p_out depending on `modify`.
 
     Args:
         range_p (np.array, optional): The different probability values we want to test out. Defaults to None.
         K (int, optional): Number of true communities to consider. Defaults to 3.
+        n (int, optional): Number of nodes. Used for ABCD only.
         modify (str, optional): Define if we modify p_in or p_out. Defaults to "out".
+        graph_type (str): "sbm" or "abcd"
         plot (bool, optional): If True, plot the results over range_p for each score. Defaults to True.
 
     Returns:
-        results (pd.DataFrame): Dataframe with multiple indexes (p, index) representing the average score for each pair.
-        number_clusters (pd.DataFrame): Dataframe with the number of clusters found for each algorithm for a given true K, for each probability value we considered.
+        results (pd.DataFrame): Dataframe with multiple indexes (p, metric) representing the average score for each pair.
+        number_clusters (pd.DataFrame): Dataframe with the number of clusters found for each algorithm and p value.
     """
-    if graph_type == "sbm":
-        graphs, proba_range = sbm_generation(K=K, range_p=range_p, modify=modify)
-    elif graph_type == "abcd":
-        graphs, proba_range = abcd_equal_size_range_xi(n=n, K=K)
+
+    if range_p is None:
+        range_p = np.round(np.linspace(0.1, 0.9, 9), 2)
+
     multi_ind = pd.MultiIndex.from_product(
-        [proba_range, possible_metrics], names=[f"p_{modify}", "Metric"]
+        [range_p, possible_metrics], names=[f"p_{modify}", "Metric"]
     )
     results = pd.DataFrame(index=multi_ind, columns=algorithms)
     results_std = pd.DataFrame(index=multi_ind, columns=algorithms)
-    
     number_clusters = pd.DataFrame(index=range_p, columns=algorithms)
-    
-    for p in proba_range:
+
+    for p in range_p:
+        if graph_type == "sbm":
+            graphs, _ = sbm_generation(K=K, range_p=np.array([p]), modify=modify)
+        elif graph_type == "abcd":
+            graphs, _ = abcd_equal_size_range_xi(range_xi=[p], K=K, n=n)
+        else:
+            raise ValueError("Invalid graph type. Must be 'sbm' or 'abcd'.")
+
         for algorithm in algorithms:
-            k_algo_avg = []
+            k_algo_counts = []
             for metric in possible_metrics:
-                _, avg_score, std_score, k = compute_score(metric, algorithm, graphs)
+                _, avg_score, std_score, cluster_dict = compute_score(
+                    metric, algorithm, graphs, graph_type=graph_type
+                )
                 results.loc[(p, metric), algorithm] = avg_score
                 results_std.loc[(p, metric), algorithm] = std_score
-                k_algo_avg.append(k)
-            number_clusters.loc[p, algorithm] = np.mean(k_algo_avg)
-        print(f"Completed p_{modify} = {p}.")
-    
-    ## Save the results in a csv file
-    name_table = f"evaluations/scores_K{K}_n{len(proba_range)}_p{modify}.csv"
+                k_algo_counts.extend(cluster_dict.values())  # Flatten dict to list of ints
+            number_clusters.loc[p, algorithm] = np.mean(k_algo_counts)
+
+        print(f"Completed p_{modify} = {p}")
+
+    # Save results
+    os.makedirs("evaluations", exist_ok=True)
+    name_table = f"evaluations/scores_K{K}_n{len(range_p)}_{graph_type}_p{modify}.csv"
     results.to_csv(name_table)
     print(f"Results saved at {name_table}!")
-    
+
     if plot:
-        title = f"Community detection average performance for {K} communities across different scores, using {len(proba_range)} {graph_type.upper()} graphs"
+        if graph_type == "sbm":
+            title = f"Community detection average performance for {K} communities across different scores (SBM), modifying p_{modify}"
+        elif graph_type == "abcd":
+            title = f"Community detection average performance for {K} communities across different scores (ABCD), modifying xi"
         plot_results_range_p(results, results_std, modify, title)
-        plot_inferred_K_fixed_param(number_clusters, proba_range, f"p_{modify}", K, f"Inferred Clusters vs p_{modify} (K={K})")
-    
+        plot_inferred_K_fixed_param(number_clusters, range_p, f"p_{modify}", K, f"Inferred Clusters vs p_{modify} (K={K})")
+
     return results, number_clusters
 
 
@@ -290,6 +252,7 @@ def validation_range_n(range_n: np.array=None, K: int=3, modify: str="out", grap
     """
     if range_n is None:
         range_n = np.linspace(100*K, 1000*K, 10, dtype=np.int32)
+        range_n = [n for n in range_n if n%K == 0]
     print(range_n)
     
     multi_ind = pd.MultiIndex.from_product(
@@ -305,15 +268,17 @@ def validation_range_n(range_n: np.array=None, K: int=3, modify: str="out", grap
         if graph_type == "sbm":
             graphs, _ = sbm_generation(n=n, K=K, nb_probas=1, modify=modify)
         elif graph_type=="abcd":
-            graphs, _ = abcd_generation(f"graph_n={n}", K=K, n=n)
+            graphs, _ = abcd_equal_size_range_xi(num_graphs=1, n=n, K=K)
         for algorithm in algorithms:
-            k_algo_avg = []
+            k_algo_counts = []
             for metric in possible_metrics:
-                _, avg_score, std_score, k = compute_score(metric, algorithm, graphs)
+                _, avg_score, std_score, cluster_dict = compute_score(
+                    metric, algorithm, graphs, graph_type=graph_type
+                )
                 results.loc[(n, metric), algorithm] = avg_score
                 results_std.loc[(n, metric), algorithm] = std_score
-                k_algo_avg.append(k)
-            number_clusters.loc[n, algorithm] = np.mean(k_algo_avg)
+                k_algo_counts.extend(cluster_dict.values())
+            number_clusters.loc[n, algorithm] = np.mean(k_algo_counts)
         print(f"Completed n = {n}.")
         
     ## Save the results in a csv file
@@ -322,7 +287,7 @@ def validation_range_n(range_n: np.array=None, K: int=3, modify: str="out", grap
     print(f"Results saved at {name_table}!")
     
     if plot:
-        title = f"Community detection average performance for {K} communities across different scores, using SBM graphs varying the number of nodes n"
+        title = f"Community detection average performance for {K} communities across different scores, using {graph_type.upper()} graphs varying the number of nodes n"
         plot_results_range_n(results, results_std, modify, title)
         plot_inferred_K_fixed_param(
             number_clusters, 
