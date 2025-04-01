@@ -5,6 +5,8 @@ import graph_tool.all as gt
 import subprocess
 import os 
 
+## Configuration file generation ##
+
 def generate_script_config(
     path: str,
     seed: int=42,
@@ -17,8 +19,7 @@ def generate_script_config(
     c_min: int=50,
     c_max: int=1000,
     c_max_iter: int=1000,
-    xi: float=0.2,        # OR set mu instead
-    mu: float=None,
+    xi: float=0.2,
     islocal:str="false",
     isCL: str="false",
     nout: int=0,
@@ -27,6 +28,31 @@ def generate_script_config(
     communityfile: str="com.dat",
     networkfile: str="edge.dat"
 ):
+    """Creation of configuration file of a given directory, will then be used to generate an ABCD graph. [cf https://github.com/bkamins/ABCDGraphGenerator.jl]
+
+    Args:
+        path (str): _description_
+        seed (int, optional): Use "" for no seeding. Defaults to 42.
+        n (int, optional): Number of vertices in the graph. Defaults to 1000.
+        t1 (int, optional): Power law exponent for degree distribution. Defaults to 2.5.
+        d_min (int, optional): Minimum degree. Defaults to 5.
+        d_max (int, optional): Maximum degree. Defaults to 50.
+        d_max_iter (int, optional): Maximum number of iterations for sampling degrees. Defaults to 1000.
+        t2 (int, optional): Power law exponent for cluster size distribution. Defaults to 2.
+        c_min (int, optional): Minimum cluster size. Defaults to 50.
+        c_max (int, optional): Maximum cluster size. Defaults to 1000.
+        c_max_iter (int, optional): Maximum number of iterations for sampling cluster sizes. Defaults to 1000.
+        xi (float, optional): Fraction of edges to fall in background graph. Defaults to 0.2.
+        islocal (str, optional): If "true" mixing parameter is restricted to local cluster, otherwise it is global. Defaults to "false".
+        isCL (str, optional): If "false" use configuration model, if "true" use Chung-Lu. Defaults to "false".
+        nout (int, optional): If nout is passed and is not zero then we require islocal = "false",
+                            isCL = "false", and xi (not mu) must be passed,
+                            if nout > 0 then it is recommended that xi > 0. Defaults to 0.
+        degreefile (str, optional): Name of file do generate that contains vertex degrees. Defaults to "deg.dat".
+        communitysizesfile (str, optional): Name of file do generate that contains community sizes. Defaults to "cs.dat".
+        communityfile (str, optional): Name of file do generate that contains assignments of vertices to communities. Defaults to "com.dat".
+        networkfile (str, optional): Name of file do generate that contains edges of the generated graph. Defaults to "edge.dat".
+    """
     lines = [
         f'seed = "{seed}"',
         f'n = "{n}"',
@@ -58,7 +84,18 @@ def generate_script_config(
     with open(path, "w") as f:
         f.write("\n".join(lines))
 
+## Graph generation ##
 def load_edge_dat_as_igraph(edge_file: str, zero_index: bool = True):
+    """ Load edges from a file and create an igraph graph object.
+    The file should contain one edge per line, with the format "u v".
+
+    Args:
+        edge_file (str): Path to the edge file.
+        zero_index (bool, optional): If True, the vertices are zero-indexed. Defaults to True.
+
+    Returns:
+        g (ig.Graph): The igraph graph object created from the edges.
+    """
     edges = []
     with open(edge_file, "r") as f:
         for line in f:
@@ -73,6 +110,17 @@ def load_edge_dat_as_igraph(edge_file: str, zero_index: bool = True):
     return g
 
 def load_communities(graph: ig.Graph, com_file: str, zero_index: bool = True):
+    """ Load community labels from a file and assign them to the vertices of the graph.
+    The file should contain one line per community, with the format "community_id vertex_id".
+
+    Args:
+        graph (ig.Graph): The igraph graph object to which the community labels will be assigned.
+        com_file (str): Path to the community file.
+        zero_index (bool, optional): If True, the vertices are zero-indexed. Defaults to True.
+
+    Returns:
+        graph (ig.Graph): The igraph graph object with community labels assigned.
+    """
     with open(com_file, "r") as f:
         labels = []
         for line in f:
@@ -85,8 +133,24 @@ def load_communities(graph: ig.Graph, com_file: str, zero_index: bool = True):
     print("Loaded community labels into graph")
     return graph
 
+def abcd_generation(filename: str, K: int=None, d_min: int=5, d_max: int=50, c_min: int=50, c_max: int=1000, n: int=1000, xi: float=0.2, script_path: str="ABCD/ABCDSampler.jl"):
+    """Generate an ABCD graph using the Julia ABCDGraphGenerator.jl package.
+    The graph is generated based on the specified parameters and saved to the specified directory.
 
-def abcd_generation(filename: str, K: int=None, d_max: int=50, c_min: int=50, c_max: int=1000, n: int=1000, xi: float=0.2, script_path: str="ABCD/ABCDSampler.jl"):
+    Args:
+        filename (str): Name of the output directory and configuration file.
+        K (int, optional): Number of communities. If None, the number of communities is determined by c_min and c_max. Defaults to None.
+        d_min (int, optional): Minimum degree. Defaults to 5.
+        d_max (int, optional): Maximum degree. Defaults to 50.
+        c_min (int, optional): Minimum community size. Defaults to 50.
+        c_max (int, optional): Maximum community size. Defaults to 1000.
+        n (int, optional): Number of vertices in the graph. Defaults to 1000.
+        xi (float, optional): Fraction of edges to fall in background graph. Defaults to 0.2.
+        script_path (str, optional): Path to the Julia script for graph generation. Defaults to "ABCD/ABCDSampler.jl".
+
+    Returns:
+        graph (gt.Graph): The generated graph as a graph-tool object.
+    """
     if K is not None:
         assert n%K == 0, f"n={n} must be divisible by K={K} for equal-sized communities."
         c_min = int(n/K)
@@ -113,7 +177,7 @@ def abcd_generation(filename: str, K: int=None, d_max: int=50, c_min: int=50, c_
     community_path = os.path.join(output_dir_, "com.dat")
     
     generate_script_config(
-        config_path, n=n, d_max=d_max, c_min=c_min, c_max=c_max, xi=xi,
+        config_path, n=n, d_min=d_min, d_max=d_max, c_min=c_min, c_max=c_max, xi=xi,
         degreefile=degree_path, communitysizesfile=cs_path, 
         communityfile=community_path, networkfile=edge_path
     )
@@ -146,6 +210,15 @@ def abcd_generation(filename: str, K: int=None, d_max: int=50, c_min: int=50, c_
     return graph_gt
 
 def abcd_equal_size_range_K(range_K: np.array=None, xi: float=0.2, n: int=1000):
+    """Generate a range of ABCD graphs with equal-sized communities.
+    The number of communities is determined by the range_K parameter.
+    The graphs are generated based on the specified parameters and saved to the specified directory.
+    Args:
+        range_K (np.array, optional): Range of community sizes. If None, the range is determined based on n. Defaults to None.
+        xi (float, optional): Fraction of edges to fall in background graph. Defaults to 0.2.
+        n (int, optional): Number of vertices in the graph. Defaults to 1000.
+    Returns:
+    """
     if range_K is None:
         range_K = [k for k in range(2, min(n // 10 + 1, 50)) if n % k == 0]
     assert len(range_K) >= 1
@@ -161,55 +234,39 @@ def abcd_equal_size_range_K(range_K: np.array=None, xi: float=0.2, n: int=1000):
     print("Graph generated!")
     return abcd_graphs
 
-def abcd_equal_size_range_xi(range_xi: np.array=None, num_graphs: int=5, n: int=1000, K: int=10):
+def abcd_equal_size_range_xi(range_xi: np.array=None, num_graphs: int=5, xi_max: float = 1, n: int=1000, K: int=10, c_min: int=50, c_max:int=1000, d_min:int=5, d_max: int=50):
+    """Generate a range of ABCD graphs with equal-sized communities.
+    The number of communities is determined by the range_xi parameter.
+
+    Args:
+        range_xi (np.array, optional): Range of xi values. If None, the range is determined based on num_graphs. Defaults to None.
+        num_graphs (int, optional): Number of graphs to generate. Defaults to 5.
+        xi_max (float, optional): Maximum value of xi. Defaults to 1.
+        n (int, optional): Number of vertices in the graph. Defaults to 1000.
+        K (int, optional): Number of communities. Defaults to 10.
+        c_min (int, optional): Minimum community size. Defaults to 50.
+        c_max (int, optional): Maximum community size. Defaults to 1000.
+        d_min (int, optional): Minimum degree. Defaults to 5.
+        d_max (int, optional): Maximum degree. Defaults to 50.
+
+    Returns:
+        abcd_graphs (dict): Dictionary of generated graphs.
+        range_xi (np.array): Range of xi values used for graph generation.
+    """
     assert n%K == 0, f"n={n} must be divisible by K={K} for equal-sized communities."
+    assert xi_max > 0 and xi_max <=1, "xi has to be between 0 and 1"
     if range_xi is None:
-        range_xi = np.linspace(0.2, 1, num_graphs, endpoint=True)
+        range_xi = np.linspace(0.1, xi_max, num_graphs, endpoint=True)
     assert len(range_xi) >= 1, "Range of xi must contain at least one value."
     
     abcd_graphs = {}
     for i, xi in enumerate(range_xi):
         print(f"\n=== Generating graph {i} with xi = {xi:.2f} ===")
-        graph = abcd_generation(f"graph_{i}_xi={xi:.2f}", K=K, n=n, xi=xi)
+        graph = abcd_generation(f"graph_{i}_xi={xi:.2f}", K=K, d_min=d_min, d_max=d_max, c_min=c_min, c_max=c_max, n=n, xi=xi)
         if graph is not None:
             abcd_graphs[f"graph_{i}"] = graph
     
     from IPython.display import clear_output
     clear_output(wait=True)
-    print("Graph generated!")
+    print(f"{len(abcd_graphs)} ABCD graphs generated successfully.")
     return abcd_graphs, range_xi
-
-def abcd_equal_size_range_dmax(num_graphs: int=10, n: int=1000, K: int=10, xi: float=0.2):
-    assert n%K == 0, f"n={n} must be divisible by K={K} for equal-sized communities."
-    range_d = np.linspace(20, n//10, num_graphs, dtype=int)
-    assert len(range_d) >= 1, "Range of xi must contain at least one value."
-    
-    abcd_graphs = {}
-    for i, d_max in enumerate(range_d):
-        print(f"\n=== Generating graph {i} with d_max = {d_max} ===")
-        graph = abcd_generation(f"graph_{i}_dmax={d_max}", K=K, d_max=d_max, n=n, xi=xi)
-        if graph is not None:
-            abcd_graphs[f"graph_{i}"] = graph
-    
-    from IPython.display import clear_output
-    clear_output(wait=True)
-    
-    print("Graph generated!")
-    return abcd_graphs
-
-def abcd_equal_size_range_c_min(num_graphs: int=10, n: int=1000, K: int=10, xi: float=0.2):
-    assert n%K == 0, f"n={n} must be divisible by K={K} for equal-sized communities."
-    range_c = np.linspace(20, n//10, num_graphs, dtype=int)
-    assert len(range_c) >= 1, "Range of xi must contain at least one value."
-    
-    abcd_graphs = {}
-    for i, c_min in enumerate(range_c):
-        print(f"\n=== Generating graph {i} with d_max = {c_min} ===")
-        graph = abcd_generation(f"graph_{i}_c_min={c_min}", K=K, c_min=c_min, n=n, xi=xi)
-        if graph is not None:
-            abcd_graphs[f"graph_{i}"] = graph
-    
-    from IPython.display import clear_output
-    clear_output(wait=True)
-    print("Graph generated!")
-    return abcd_graphs
