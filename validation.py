@@ -11,6 +11,8 @@ from ABCD.abcd_generation import *
 
 
 algorithms = ["bayesian", "bayesian_fixed_K", "spectral", "leiden", "louvain"]
+algo_fixed_K = ["bayesian_fixed_K", "spectral"]
+algo_not_fixed_K = [algo for algo in algorithms if algo not in algo_fixed_K]
 possible_metrics = [
     "adjusted_mutual_info_score", 
     "adjusted_rand_score", 
@@ -171,7 +173,7 @@ def validation_range_K(range_K, modify: str="out", plot: bool=True, graph_type="
         title = f"Community detection performance across different scores ({graph_type.upper()}), varying the number of clusters K"
         #plot_results_range_K(results_mean, results_std, title, number_clusters)
         plot_results_generic(results_mean, results_std, param_name, "K", title)
-        plot_inferred_K(number_clusters, range_K)
+        plot_inferred_K(number_clusters, range_K, param_name=param_name)
 
     return results_mean, number_clusters
 
@@ -238,7 +240,7 @@ def validation_range_p(range_p: np.array=None, K: int=3, n: int=1000, modify: st
         elif graph_type == "abcd":
             title = f"Community detection average performance for {K} communities across different scores (using ABCD graphs), modifying xi"
         plot_results_generic(results, results_std, param_name, title=title)
-        plot_inferred_K_fixed_param(number_clusters, range_p, f"p_{modify}", K, f"Inferred Clusters vs p_{modify} (K={K})")
+        plot_inferred_K_fixed_param(number_clusters, range_p, param_name, K, f"Inferred Clusters vs {param_name} (K={K})")
 
     return results, number_clusters
 
@@ -347,7 +349,7 @@ def validation_range_c_min(num_graphs: int, K: int=5,  n: int=1000, c_max: int=1
         plot_inferred_K_fixed_param(
             number_clusters, 
             param_range=range_c, 
-            param_name="c_min", 
+            param_name=param_name, 
             true_K=K,
             title=f"Inferred Clusters vs c_min (K={K})"
         )
@@ -360,8 +362,10 @@ def validation_range_d_max(num_graphs: int, K: int=5,  n: int=1000, d_min: int=5
     assert max_val >= d_min
     range_d = np.linspace(20, max_val, num_graphs, dtype=int)
     
+    param_name = "d_max"
+    
     multi_ind = pd.MultiIndex.from_product(
-        [range_d, possible_metrics], names=[f"d", "Metric"]
+        [range_d, possible_metrics], names=[param_name, "Metric"]
     )
     results = pd.DataFrame(index=multi_ind, columns=algorithms)
     results_std = pd.DataFrame(index=multi_ind, columns=algorithms)
@@ -379,7 +383,7 @@ def validation_range_d_max(num_graphs: int, K: int=5,  n: int=1000, d_min: int=5
                 results_std.loc[(d, metric), algorithm] = std_score
                 k_algo_counts.extend(cluster_dict.values())
             number_clusters.loc[d, algorithm] = np.mean(k_algo_counts)
-        print(f"Completed d_max = {d}.")
+        print(f"Completed {param_name} = {d}.")
         
     ## Save the results in a csv file
     name_table = f"evaluations/scores_K{K}_dmax_from{range_d[0]}to{range_d[-1]}_ABCD.csv"
@@ -388,11 +392,11 @@ def validation_range_d_max(num_graphs: int, K: int=5,  n: int=1000, d_min: int=5
     
     if plot:
         title = f"Community detection average performance for {K} communities across different scores, using ABCD graphs varying d_max"
-        plot_range_d_max(results, results_std, title)
+        plot_results_generic(results, results_std, param_name=param_name, title=title)
         plot_inferred_K_fixed_param(
             number_clusters, 
             param_range=range_d, 
-            param_name="d_max", 
+            param_name=param_name, 
             true_K=K,
             title=f"Inferred Clusters vs d_max (K={K})"
         )
@@ -400,7 +404,7 @@ def validation_range_d_max(num_graphs: int, K: int=5,  n: int=1000, d_min: int=5
     return results, number_clusters
 
 ### PLOT FUNCTIONS ###
-def plot_inferred_K(number_clusters, true_K_range, title="Inferred Number of Clusters"):
+def plot_inferred_K(number_clusters, true_K_range, param_name: str, title="Inferred Number of Clusters"):
     """ Plot the number of clusters found by each algorithm for a given true K.
     The true K is represented by the dashed line.
 
@@ -421,7 +425,7 @@ def plot_inferred_K(number_clusters, true_K_range, title="Inferred Number of Clu
     plt.tight_layout()
     plt.show()
 
-def plot_inferred_K_fixed_param(number_clusters, param_range, param_name="p_out", true_K=None, title="Inferred Number of Clusters"):
+def plot_inferred_K_fixed_param(number_clusters, param_range, param_name: str, true_K=None, title="Inferred Number of Clusters"):
     plt.figure(figsize=(10, 6))
     
     for algo in number_clusters.columns:
@@ -438,78 +442,6 @@ def plot_inferred_K_fixed_param(number_clusters, param_range, param_name="p_out"
     plt.tight_layout()
     plt.show()
 
-def plot_range_d_max(results_mean, results_std, title: str=None):
-    from IPython.display import clear_output
-    clear_output(wait=True)
-    
-    algos = results_mean.columns 
-    metrics = results_mean.index.get_level_values("Metric").unique()
-    range_d = results_mean.index.get_level_values(f"d").unique()  
-
-    f, axs = plt.subplots(1, len(metrics), figsize=(5 * len(metrics), 5), sharex=True, sharey=True)
-
-    if len(metrics) == 1: 
-        axs = [axs]
-
-    for i, metric in enumerate(metrics):
-        avg_scores = results_mean.xs(metric, level="Metric")
-        std_scores = results_std.xs(metric, level="Metric")
-
-        for algo in algos:
-            mean_values = avg_scores[algo].astype(float) 
-            std_values = std_scores[algo].astype(float)  
-
-            std_values = np.nan_to_num(std_values, nan=0.0) 
-
-            axs[i].plot(range_d, mean_values, marker='x', label=algo)
-            axs[i].fill_between(range_d, mean_values - std_values, mean_values + std_values, alpha=0.2)
-
-        axs[i].set_title(metric.replace("_", " ").title())
-        axs[i].set_xlabel("d_max")
-        axs[i].set_ylabel("Score")
-        axs[i].legend()
-        axs[i].grid(True)
-        
-    f.suptitle(title, fontsize=14, fontweight="bold")
-    plt.tight_layout()
-    plt.show()
-    
-def plot_range_c_min(results_mean, results_std, title: str=None):
-    from IPython.display import clear_output
-    clear_output(wait=True)
-    
-    algos = results_mean.columns 
-    metrics = results_mean.index.get_level_values("Metric").unique()
-    range_c = results_mean.index.get_level_values(f"c").unique()  
-
-    f, axs = plt.subplots(1, len(metrics), figsize=(5 * len(metrics), 5), sharex=True, sharey=True)
-
-    if len(metrics) == 1: 
-        axs = [axs]
-
-    for i, metric in enumerate(metrics):
-        avg_scores = results_mean.xs(metric, level="Metric")
-        std_scores = results_std.xs(metric, level="Metric")
-
-        for algo in algos:
-            mean_values = avg_scores[algo].astype(float) 
-            std_values = std_scores[algo].astype(float)  
-
-            std_values = np.nan_to_num(std_values, nan=0.0) 
-
-            axs[i].plot(range_c, mean_values, marker='x', label=algo)
-            axs[i].fill_between(range_c, mean_values - std_values, mean_values + std_values, alpha=0.2)
-
-        axs[i].set_title(metric.replace("_", " ").title())
-        axs[i].set_xlabel("c_min")
-        axs[i].set_ylabel("Score")
-        axs[i].legend()
-        axs[i].grid(True)
-        
-    f.suptitle(title, fontsize=14, fontweight="bold")
-    plt.tight_layout()
-    plt.show()
-
 def plot_results_generic(
     results_mean,
     results_std,
@@ -519,6 +451,7 @@ def plot_results_generic(
 ):
     """
     Generic plotting function for evaluation results over a varying parameter.
+    Shows two rows: one for fixed-K algorithms, one for non-fixed-K algorithms.
 
     Args:
         results_mean (pd.DataFrame): Mean scores, indexed by MultiIndex (param_value, "Metric")
@@ -530,34 +463,41 @@ def plot_results_generic(
     from IPython.display import clear_output
     clear_output(wait=True)
 
-    algos = results_mean.columns
+    all_algos = results_mean.columns
     metrics = results_mean.index.get_level_values("Metric").unique()
     param_values = results_mean.index.get_level_values(param_name).unique()
 
-    f, axs = plt.subplots(1, len(metrics), figsize=(5 * len(metrics), 5), sharex=True)
+    fixed_K_algos = ["bayesian_fixed_K", "spectral"]
+    non_fixed_K_algos = [a for a in all_algos if a not in fixed_K_algos]
+
+    f, axs = plt.subplots(2, len(metrics), figsize=(5 * len(metrics), 10), sharex=True, sharey=True)
 
     if len(metrics) == 1:
-        axs = [axs]
+        axs = np.array([[axs[0]], [axs[1]]])  # Ensure 2D shape even with one column
 
-    for i, metric in enumerate(metrics):
+    for col, metric in enumerate(metrics):
         avg_scores = results_mean.xs(metric, level="Metric")
         std_scores = results_std.xs(metric, level="Metric")
 
-        ax = axs[i]
-        for algo in algos:
-            mean_values = avg_scores[algo].astype(float)
-            std_values = std_scores[algo].astype(float)
-            std_values = np.nan_to_num(std_values, nan=0.0)
+        for row, algo_group in enumerate([non_fixed_K_algos, fixed_K_algos]):
+            ax = axs[row][col]
+            for algo in algo_group:
+                mean_values = avg_scores[algo].astype(float)
+                std_values = std_scores[algo].astype(float)
+                std_values = np.nan_to_num(std_values, nan=0.0)
 
-            ax.plot(param_values, mean_values, marker='x', label=algo)
-            ax.fill_between(param_values, mean_values - std_values, mean_values + std_values, alpha=0.2)
+                ax.plot(param_values, mean_values, marker='x', label=algo)
+                ax.fill_between(param_values, mean_values - std_values, mean_values + std_values, alpha=0.2)
 
-        ax.set_title(metric.replace("_", " ").title())
-        ax.set_xlabel(param_label if param_label else param_name)
-        ax.set_ylabel("Score")
-        ax.grid(True)
-        ax.legend()
+            ax.set_title(f"{metric.replace('_', ' ').title()} ({'Fixed K' if row == 1 else 'Inferred K'})")
+            if row == 1:
+                ax.set_xlabel(param_label if param_label else param_name)
+            if col == 0:
+                ax.set_ylabel("Score")
+            ax.grid(True)
+            ax.legend()
 
     f.suptitle(title, fontsize=14, fontweight="bold")
-    plt.tight_layout()
+    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
     plt.show()
+

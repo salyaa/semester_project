@@ -106,7 +106,6 @@ def load_edge_dat_as_igraph(edge_file: str, zero_index: bool = True):
             edges.append((u, v))
 
     g = ig.Graph(edges=edges)
-    print(f"Loaded graph with {g.vcount()} nodes and {g.ecount()} edges")
     return g
 
 def load_communities(graph: ig.Graph, com_file: str, zero_index: bool = True):
@@ -130,7 +129,6 @@ def load_communities(graph: ig.Graph, com_file: str, zero_index: bool = True):
                 community -= 1
             labels.append(community)
     graph.vs["community"] = labels
-    print("Loaded community labels into graph")
     return graph
 
 def abcd_generation(filename: str, K: int=None, d_min: int=5, d_max: int=50, c_min: int=50, c_max: int=1000, n: int=1000, xi: float=0.2, script_path: str="ABCD/ABCDSampler.jl"):
@@ -186,13 +184,6 @@ def abcd_generation(filename: str, K: int=None, d_min: int=5, d_max: int=50, c_m
         capture_output=True,
         text=True
     )
-
-    if result.returncode != 0:
-        print("Julia CLI graph generation failed:")
-        print(result.stderr)
-    else:
-        print("Graph generation completed!")
-        print(result.stdout)
     graph = load_edge_dat_as_igraph(edge_path)
     load_communities(graph, community_path)
     
@@ -204,8 +195,6 @@ def abcd_generation(filename: str, K: int=None, d_min: int=5, d_max: int=50, c_m
     for v in graph_gt.vertices():
         vprop[v] = graph.vs["community"][int(v)]
     graph_gt.vp["block"] = vprop
-
-    print("Converted to graph_tool.Graph with community labels.")
 
     return graph_gt
 
@@ -225,12 +214,9 @@ def abcd_equal_size_range_K(range_K: np.array=None, xi: float=0.2, n: int=1000):
     
     abcd_graphs = {}
     for i, K in enumerate(range_K):
-        print(f"\n=== Generating graph {i} with community size {K} ===")
         graph = abcd_generation(f"graph_{i}_K={K}", K=K, n=n, xi=xi)
         if graph is not None:
             abcd_graphs[f"graph_{i}"] = graph
-    from IPython.display import clear_output
-    clear_output(wait=True)
     print("Graph generated!")
     return abcd_graphs
 
@@ -261,12 +247,10 @@ def abcd_equal_size_range_xi(range_xi: np.array=None, num_graphs: int=5, xi_max:
     
     abcd_graphs = {}
     for i, xi in enumerate(range_xi):
-        print(f"\n=== Generating graph {i} with xi = {xi:.2f} ===")
         graph = abcd_generation(f"graph_{i}_xi={xi:.2f}", K=K, d_min=d_min, d_max=d_max, c_min=c_min, c_max=c_max, n=n, xi=xi)
         if graph is not None:
             abcd_graphs[f"graph_{i}"] = graph
     
     from IPython.display import clear_output
     clear_output(wait=True)
-    print(f"{len(abcd_graphs)} ABCD graphs generated successfully.")
     return abcd_graphs, range_xi
