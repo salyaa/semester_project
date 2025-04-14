@@ -1,5 +1,6 @@
 import graph_tool.all as gt 
 import numpy as np
+import igraph as ig 
 
 def sbm_generation(n: int = 1000, K: int = 3, nb_probas: int = 5, range_p: np.array=None, modify: str = "out"):
     """
@@ -20,7 +21,7 @@ def sbm_generation(n: int = 1000, K: int = 3, nb_probas: int = 5, range_p: np.ar
     assert K>2, "need at least 3 clusters"
     assert n > K
     
-    p = np.log(n)/n
+    p = 2 * K * np.log(n)/n
 
     ## Distribute evenly nodes across communities
     group_sizes = [n // K] * K
@@ -32,11 +33,12 @@ def sbm_generation(n: int = 1000, K: int = 3, nb_probas: int = 5, range_p: np.ar
         if nb_probas == 1:
             range_p = [np.log(n)/n]
         elif nb_probas == 2:
-            range_p = [np.log(n)/(3*n), np.log(n)/(2*n)]
+            range_p = [np.log(n)/(n), K*np.log(n)/(n)]
         else:
-            range_p = np.linspace(0, p, num=nb_probas, endpoint=True)
+            range_p = [b * np.log(n)/n for b in range(0, 2 * K + 1)]
     
     graphs = {}
+    memberships = {}
     for i, p_mod in enumerate(range_p):
         if modify == "out":
             communities_matrix = np.full((K, K), p_mod) 
@@ -47,14 +49,15 @@ def sbm_generation(n: int = 1000, K: int = 3, nb_probas: int = 5, range_p: np.ar
 
         block_membership = np.concatenate([[k] * size for k, size in enumerate(group_sizes)])
 
-        G, b = gt.random_graph(n, 
-                            lambda : (np.random.poisson(5), np.random.poisson(5)),
-                            model="blockmodel",
-                            edge_probs=communities_matrix,
-                            block_membership=block_membership)
-
-        G.vp["block"] = b
+        # G, b = gt.random_graph(
+        #                     n, 
+        #                     lambda : (np.random.poisson(5), np.random.poisson(5)),
+        #                     model="blockmodel",
+        #                     edge_probs=communities_matrix,
+        #                     block_membership=block_membership
+        # )
+        G = ig.Graph.SBM(np.sum(group_sizes), communities_matrix, group_sizes)
         graphs[f"SBM_{modify}_{i}"] = G  
-    return graphs, range_p
-
-## Could create a function to plots the various graph to see the impact of modifying p_in or p_out.
+        memberships[f"SBM_{modify}_{i}"] = block_membership
+        
+    return graphs, range_p, memberships

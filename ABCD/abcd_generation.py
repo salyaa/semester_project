@@ -1,12 +1,11 @@
 import numpy as np 
-import igraph as ig 
 import graph_tool.all as gt
+import igraph as ig 
 
 import subprocess
 import os 
 
 ## Configuration file generation ##
-
 def generate_script_config(
     path: str,
     seed: int=42,
@@ -85,51 +84,40 @@ def generate_script_config(
         f.write("\n".join(lines))
 
 ## Graph generation ##
-def load_edge_dat_as_igraph(edge_file: str, zero_index: bool = True):
-    """ Load edges from a file and create an igraph graph object.
-    The file should contain one edge per line, with the format "u v".
-
-    Args:
-        edge_file (str): Path to the edge file.
-        zero_index (bool, optional): If True, the vertices are zero-indexed. Defaults to True.
-
-    Returns:
-        g (ig.Graph): The igraph graph object created from the edges.
-    """
-    edges = []
-    with open(edge_file, "r") as f:
-        for line in f:
-            u, v = map(int, line.strip().split())
-            if zero_index:
-                u -= 1
-                v -= 1
-            edges.append((u, v))
-
-    g = ig.Graph(edges=edges)
+def load_edge_dat(edge_file: str, zero_index: bool = True) -> ig.Graph:
+    edges = np.loadtxt(edge_file, dtype=int)
+    if zero_index:
+        edges -= 1
+    num_vertices = edges.max() + 1
+    g = ig.Graph(edges.tolist(), directed=False)
+    g.add_vertices(num_vertices - g.vcount())
     return g
 
-def load_communities(graph: ig.Graph, com_file: str, zero_index: bool = True):
-    """ Load community labels from a file and assign them to the vertices of the graph.
-    The file should contain one line per community, with the format "community_id vertex_id".
-
-    Args:
-        graph (ig.Graph): The igraph graph object to which the community labels will be assigned.
-        com_file (str): Path to the community file.
-        zero_index (bool, optional): If True, the vertices are zero-indexed. Defaults to True.
-
-    Returns:
-        graph (ig.Graph): The igraph graph object with community labels assigned.
+def load_communities(graph: ig.Graph, com_file: str, zero_index: bool = True) -> list:
     """
-    with open(com_file, "r") as f:
-        labels = []
-        for line in f:
-            parts = line.strip().split()
-            community = int(parts[1])  
-            if zero_index:
-                community -= 1
-            labels.append(community)
-    graph.vs["community"] = labels
-    return graph
+    Load community assignments from file and attach as a vertex attribute to an igraph.Graph.
+    
+    Parameters:
+    - graph (igraph.Graph): The graph to annotate.
+    - com_file (str): Path to the community membership file.
+    - zero_index (bool): Whether to adjust indexing to zero-based.
+    
+    Returns:
+    - membership (list): A list of community assignments indexed by vertex ID.
+    """
+    data = np.loadtxt(com_file, dtype=int)
+    vertex_ids = data[:, 0]
+    communities = data[:, 1]
+    if zero_index:
+        vertex_ids -= 1
+
+    membership = [None] * graph.vcount()
+    for vid, comm in zip(vertex_ids, communities):
+        membership[vid] = comm
+
+    graph.vs["community"] = membership
+    return membership
+
 
 def abcd_generation(filename: str, K: int=None, d_min: int=5, d_max: int=50, c_min: int=50, c_max: int=1000, n: int=1000, xi: float=0.2, script_path: str="ABCD/ABCDSampler.jl"):
     """Generate an ABCD graph using the Julia ABCDGraphGenerator.jl package.
@@ -184,19 +172,11 @@ def abcd_generation(filename: str, K: int=None, d_min: int=5, d_max: int=50, c_m
         capture_output=True,
         text=True
     )
-    graph = load_edge_dat_as_igraph(edge_path)
-    load_communities(graph, community_path)
     
-    graph_gt = gt.Graph(directed=False)
-    graph_gt.add_vertex(graph.vcount())
-    graph_gt.add_edge_list(graph.get_edgelist())
-    
-    vprop = graph_gt.new_vertex_property("int")
-    for v in graph_gt.vertices():
-        vprop[v] = graph.vs["community"][int(v)]
-    graph_gt.vp["block"] = vprop
+    graph = load_edge_dat(edge_path)
+    block_membership=load_communities(graph, community_path)
 
-    return graph_gt
+    return graph, block_membership
 
 def abcd_equal_size_range_K(range_K: np.array=None, xi: float=0.2, n: int=1000):
     """Generate a range of ABCD graphs with equal-sized communities.
@@ -213,12 +193,14 @@ def abcd_equal_size_range_K(range_K: np.array=None, xi: float=0.2, n: int=1000):
     assert len(range_K) >= 1
     
     abcd_graphs = {}
+    memberships = {}
     for i, K in enumerate(range_K):
-        graph = abcd_generation(f"graph_{i}_K={K}", K=K, n=n, xi=xi)
+        graph, b = abcd_generation(f"graph_{i}_K={K}", K=K, n=n, xi=xi)
         if graph is not None:
             abcd_graphs[f"graph_{i}"] = graph
+            memberships[f"graph_{i}"] = b
     print("Graph generated!")
-    return abcd_graphs
+    return abcd_graphs, memberships
 
 def abcd_equal_size_range_xi(range_xi: np.array=None, num_graphs: int=5, xi_max: float = 1, n: int=1000, K: int=10, c_min: int=50, c_max:int=1000, d_min:int=5, d_max: int=50):
     """Generate a range of ABCD graphs with equal-sized communities.
@@ -237,7 +219,7 @@ def abcd_equal_size_range_xi(range_xi: np.array=None, num_graphs: int=5, xi_max:
 
     Returns:
         abcd_graphs (dict): Dictionary of generated graphs.
-        range_xi (np.array): Range of xi values used for graph generation.
+        range_xi (np.array): Range of xi values used for graph generation
     """
     assert n%K == 0, f"n={n} must be divisible by K={K} for equal-sized communities."
     assert xi_max > 0 and xi_max <=1, "xi has to be between 0 and 1"
@@ -246,11 +228,13 @@ def abcd_equal_size_range_xi(range_xi: np.array=None, num_graphs: int=5, xi_max:
     assert len(range_xi) >= 1, "Range of xi must contain at least one value."
     
     abcd_graphs = {}
+    memberships = {}
     for i, xi in enumerate(range_xi):
-        graph = abcd_generation(f"graph_{i}_xi={xi:.2f}", K=K, d_min=d_min, d_max=d_max, c_min=c_min, c_max=c_max, n=n, xi=xi)
+        graph, b = abcd_generation(f"graph_{i}_xi={xi:.2f}", K=K, d_min=d_min, d_max=d_max, c_min=c_min, c_max=c_max, n=n, xi=xi)
         if graph is not None:
             abcd_graphs[f"graph_{i}"] = graph
+            memberships[f"graph_{i}"] = b
     
     from IPython.display import clear_output
     clear_output(wait=True)
-    return abcd_graphs, range_xi
+    return abcd_graphs, range_xi, memberships

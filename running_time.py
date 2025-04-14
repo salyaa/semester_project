@@ -19,7 +19,7 @@ possible_metrics = [
 graph_types = ["sbm", "abcd"]
 
 
-def compute_running_time(metric, algorithm, graphs, graph_type: str="sbm", n_runs: int=10):
+def compute_running_time(metric, algorithm, graphs, memberships, graph_type: str="sbm", n_runs: int=10):
     """Compute running time for a certain (metric, algorithm) pair in order to compare algorithms' performance.
 
     Args:
@@ -34,7 +34,7 @@ def compute_running_time(metric, algorithm, graphs, graph_type: str="sbm", n_run
     times = []
     for _ in range(n_runs):
         start = time.time()
-        _, _, _, _ = compute_score(metric, algorithm, graphs, graph_type)
+        _, _, _, _ = compute_score(metric, algorithm, graphs, memberships, graph_type)
         times.append(time.time() - start)
     avg_time = np.mean(times)
     return avg_time
@@ -55,13 +55,13 @@ def running_time_analysis(K: int=3, nb_probas: int=5, modify : str="out", graph_
     assert graph_type in graph_types
     
     if graph_type == "sbm":
-        graphs, _ = sbm_generation(K=K, nb_probas=nb_probas, modify=modify)
+        graphs, _, b = sbm_generation(K=K, nb_probas=nb_probas, modify=modify)
     elif graph_type == "abcd":
-        graphs, _ = abcd_equal_size_range_xi(num_graphs=nb_probas, K=K)
+        graphs, _, b = abcd_equal_size_range_xi(num_graphs=nb_probas, K=K)
     results = pd.DataFrame(index=possible_metrics, columns=algorithms)
     for algorithm in algorithms:
         for metric in possible_metrics:
-            time = compute_running_time(metric, algorithm, graphs, graph_type)
+            time = compute_running_time(metric, algorithm, graphs, b, graph_type)
             results.loc[metric, algorithm] = time
     
     ## Save results in a csv file
@@ -107,11 +107,11 @@ def running_time_vs_n(range_n: np.array=None, K: int=5, n_runs: int=10, metric: 
     
     for n in range_n:
         if graph_type == "sbm":
-            graphs, _ = sbm_generation(n=n, K=K, nb_probas=1)
+            graphs, _, b = sbm_generation(n=n, K=K, nb_probas=1)
         elif graph_type == "abcd":
-            graphs, _ = abcd_equal_size_range_xi(num_graphs=1, n=n, K=K)
+            graphs, _, b = abcd_equal_size_range_xi(num_graphs=1, n=n, K=K)
         for algorithm in algorithms:
-            time = compute_running_time(metric, algorithm, graphs, graph_type, n_runs=n_runs)
+            time = compute_running_time(metric, algorithm, graphs, b, graph_type, n_runs=n_runs)
             results.loc[n, algorithm] = time
         print(f"{n} done!")
     
@@ -157,12 +157,12 @@ def running_time_vs_K(
     for K in range_K:
         print(f"\nTesting K = {K}")
         if graph_type == "sbm":
-            graphs, _ = sbm_generation(n=n, K=K, nb_probas=nb_probas)
+            graphs, _, b = sbm_generation(n=n, K=K, nb_probas=nb_probas)
         elif graph_type == "abcd":
-            graphs, _ = abcd_equal_size_range_xi(num_graphs=nb_probas, K=K)
+            graphs, _, b = abcd_equal_size_range_xi(num_graphs=nb_probas, K=K)
         
         for algo in algorithms:
-            t = compute_running_time(metric, algo, graphs, graph_type, n_runs)
+            t = compute_running_time(metric, algo, graphs, b, graph_type, n_runs)
             results.loc[K, algo] = t
 
     # Save results

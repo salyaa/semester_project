@@ -23,7 +23,7 @@ possible_metrics = [
 graph_types = ["sbm", "abcd"]
 
 
-def compute_score(metric, algorithm, graphs, graph_type: str="sbm"):
+def compute_score(metric, algorithm, graphs, block_membership, graph_type: str="sbm"):
     """Compute a given index for a dictionary of graphs
 
     Args:
@@ -54,7 +54,7 @@ def compute_score(metric, algorithm, graphs, graph_type: str="sbm"):
     number_clusters_found = {}
     
     for key, graph in graphs.items():
-        true_clusters = graph.vp["block"].a
+        true_clusters = block_membership[key]
         
         #useful for graph conversion
         if isinstance(graph, gt.Graph):
@@ -64,12 +64,12 @@ def compute_score(metric, algorithm, graphs, graph_type: str="sbm"):
 
         if algorithm in ["bayesian", "bayesian_fixed_K"]:
             from algorithms.statistical import bayesianInf, bayesianInfFixedK
-            if algorithm == "bayesian":
-                if isinstance(graph, ig.Graph):
+            if isinstance(graph, ig.Graph):
                     gt_graph = gt.Graph(directed=False)
-                    gt_graph.add_vertex(graph.vcount())
-                    gt_graph.add_edge_list(graph.get_edgelist())
+                    gt_graph.add_vertex(n=graph.vcount())
+                    gt_graph.add_edge_list(graph_edges)
                     graph = gt_graph
+            if algorithm == "bayesian":
                 clusters = bayesianInf(graph)
             else:
                 clusters = bayesianInfFixedK(G=graph, K=len(set(true_clusters)))
@@ -78,9 +78,14 @@ def compute_score(metric, algorithm, graphs, graph_type: str="sbm"):
         elif algorithm == "spectral":
             from algorithms.spectral import spectral
             graph_nx = nx.Graph()
-            node_mapping = {v: i for i, v in enumerate(graph.vertices())}
-            graph_nx.add_nodes_from(node_mapping.values())
-            graph_nx.add_edges_from([(node_mapping[int(e.source())], node_mapping[int(e.target())]) for e in graph.edges()])
+            if isinstance(graph, ig.Graph):
+                node_mapping = {v.index: i for i, v in enumerate(graph.vs)}
+                graph_nx.add_nodes_from(node_mapping.values())
+                graph_nx.add_edges_from([(node_mapping[u], node_mapping[v]) for u, v in graph.get_edgelist()])
+            else:
+                node_mapping = {v: i for i, v in enumerate(graph.vertices())}
+                graph_nx.add_nodes_from(node_mapping.values())
+                graph_nx.add_edges_from([(node_mapping[int(e.source())], node_mapping[int(e.target())]) for e in graph.edges()])
             if not nx.is_connected(graph_nx):
                 lcc = max(nx.connected_components(graph_nx), key=len)
                 graph_nx = graph_nx.subgraph(lcc).copy()
@@ -89,13 +94,15 @@ def compute_score(metric, algorithm, graphs, graph_type: str="sbm"):
         
         elif algorithm in ["louvain", "leiden"]: # leiden and louvain
             ## Need to convert gt.Graph into ig.Graph
-            graph_ig = ig.Graph()
-            graph_ig.add_vertices(n=graph.num_vertices())
-            graph_ig.add_edges(graph_edges)
+            if isinstance(graph, gt.Graph):
+                graph_ig = ig.Graph()
+                graph_ig.add_vertices(n=graph.num_vertices())
+                graph_ig.add_edges(graph_edges)
+                graph = graph_ig
             
             from algorithms.modularity_based import louvain, leiden
             method = leiden if algorithm == "leiden" else louvain
-            clusters = method(graph_ig)
+            clusters = method(graph)
             predicted_clusters = clusters.membership
         
         # Had issue with graph conversion, so test this:
@@ -136,9 +143,9 @@ def validation_range_K(range_K, modify: str="out", plot: bool=True, graph_type="
 
     for K in range_K:
         if graph_type == "sbm":
-            graphs, _ = sbm_generation(K=K, nb_probas=1, modify=modify)
+            graphs, _, memberships = sbm_generation(K=K, nb_probas=1, modify=modify)
         elif graph_type == "abcd":
-            graphs = abcd_equal_size_range_K(range_K=[K])
+            graphs, memberships = abcd_equal_size_range_K(range_K=[K])
         else:
             raise ValueError("Invalid graph type. Must be 'sbm' or 'abcd'.")
 
@@ -147,7 +154,7 @@ def validation_range_K(range_K, modify: str="out", plot: bool=True, graph_type="
 
             for metric in possible_metrics:
                 _, avg_score, std_score, cluster_dict = compute_score(
-                    metric, algorithm, graphs, graph_type=graph_type
+                    metric, algorithm, graphs, memberships, graph_type=graph_type
                 )
                 results_mean.loc[(K, metric), algorithm] = avg_score
                 results_std.loc[(K, metric), algorithm] = std_score
@@ -198,7 +205,10 @@ def validation_range_p(range_p: np.array=None, K: int=3, n: int=1000, modify: st
         param_name = "xi"
 
     if range_p is None:
-        range_p = np.round(np.linspace(0.1, 0.9, 9), 2)
+        if graph_type == "sbm": # entre 0 et 4*K*log(n)/n
+            range_p = np.linspace(0, 4*K*np.log(n)/n, 11) 
+        else:
+            range_p = np.round(np.linspace(0.1, 0.9, 9), 2)
 
     multi_ind = pd.MultiIndex.from_product(
         [range_p, possible_metrics], names=[param_name, "Metric"]
@@ -209,9 +219,9 @@ def validation_range_p(range_p: np.array=None, K: int=3, n: int=1000, modify: st
 
     for p in range_p:
         if graph_type == "sbm":
-            graphs, _ = sbm_generation(K=K, range_p=np.array([p]), modify=modify)
+            graphs, _, memberships = sbm_generation(K=K, range_p=np.array([p]), modify=modify)
         elif graph_type == "abcd":
-            graphs, _ = abcd_equal_size_range_xi(range_xi=[p], K=K, n=n)
+            graphs, _, memberships = abcd_equal_size_range_xi(range_xi=[p], K=K, n=n)
         else:
             raise ValueError("Invalid graph type. Must be 'sbm' or 'abcd'.")
 
@@ -219,7 +229,7 @@ def validation_range_p(range_p: np.array=None, K: int=3, n: int=1000, modify: st
             k_algo_counts = []
             for metric in possible_metrics:
                 _, avg_score, std_score, cluster_dict = compute_score(
-                    metric, algorithm, graphs, graph_type=graph_type
+                    metric, algorithm, graphs, memberships, graph_type=graph_type
                 )
                 results.loc[(p, metric), algorithm] = avg_score
                 results_std.loc[(p, metric), algorithm] = std_score
@@ -261,7 +271,8 @@ def validation_range_n(range_n: np.array=None, K: int=3, modify: str="out", grap
     
     if range_n is None:
         range_n = np.linspace(100*K, 1000*K, 10, dtype=np.int32)
-        range_n = [n for n in range_n if n%K == 0]
+        if graph_type=="abcd":
+            range_n = [n for n in range_n if n%K == 0]
     print(range_n)
     
     multi_ind = pd.MultiIndex.from_product(
@@ -275,14 +286,14 @@ def validation_range_n(range_n: np.array=None, K: int=3, modify: str="out", grap
     for n in range_n:
         assert n%K == 0
         if graph_type == "sbm":
-            graphs, _ = sbm_generation(n=n, K=K, nb_probas=5, modify=modify)
+            graphs, _, memberships = sbm_generation(n=n, K=K, nb_probas=5, modify=modify)
         elif graph_type=="abcd":
-            graphs, _ = abcd_equal_size_range_xi(num_graphs=5, xi_max=0.4, n=n, K=K)
+            graphs, _, memberships = abcd_equal_size_range_xi(num_graphs=5, xi_max=0.4, n=n, K=K)
         for algorithm in algorithms:
             k_algo_counts = []
             for metric in possible_metrics:
                 _, avg_score, std_score, cluster_dict = compute_score(
-                    metric, algorithm, graphs, graph_type=graph_type
+                    metric, algorithm, graphs, memberships, graph_type=graph_type
                 )
                 results.loc[(n, metric), algorithm] = avg_score
                 results_std.loc[(n, metric), algorithm] = std_score
@@ -313,7 +324,7 @@ def validation_range_c_min(num_graphs: int, K: int=5,  n: int=1000, c_max: int=1
     param_name = "c_min"
     
     assert n%K == 0, f"n={n} must be divisible by K={K} for equal-sized communities."
-    max_val = int(n/10)
+    max_val = int(n/K)
     assert max_val <= c_max
     range_c = np.linspace(20, max_val, num_graphs, dtype=int)
     
@@ -325,12 +336,12 @@ def validation_range_c_min(num_graphs: int, K: int=5,  n: int=1000, c_max: int=1
     number_clusters = pd.DataFrame(index=range_c, columns=algorithms)
     
     for c in range_c:
-        graphs, _ = abcd_equal_size_range_xi(num_graphs=5, xi_max=xi_max, n=n, K=K, c_min=c, c_max=c_max)
+        graphs, _, memberships = abcd_equal_size_range_xi(num_graphs=5, xi_max=xi_max, n=n, K=K, c_min=c, c_max=c_max)
         for algorithm in algorithms:
             k_algo_counts = []
             for metric in possible_metrics:
                 _, avg_score, std_score, cluster_dict = compute_score(
-                    metric, algorithm, graphs, graph_type="abcd"
+                    metric, algorithm, graphs, memberships, graph_type="abcd"
                 )
                 results.loc[(c, metric), algorithm] = avg_score
                 results_std.loc[(c, metric), algorithm] = std_score
@@ -372,12 +383,12 @@ def validation_range_d_max(num_graphs: int, K: int=5,  n: int=1000, d_min: int=5
     number_clusters = pd.DataFrame(index=range_d, columns=algorithms)
     
     for d in range_d:
-        graphs, _ = abcd_equal_size_range_xi(num_graphs=5, xi_max=xi_max, n=n, K=K, d_min=d_min, d_max=d)
+        graphs, _, memberships = abcd_equal_size_range_xi(num_graphs=5, xi_max=xi_max, n=n, K=K, d_min=d_min, d_max=d)
         for algorithm in algorithms:
             k_algo_counts = []
             for metric in possible_metrics:
                 _, avg_score, std_score, cluster_dict = compute_score(
-                    metric, algorithm, graphs, graph_type="abcd"
+                    metric, algorithm, graphs, memberships, graph_type="abcd"
                 )
                 results.loc[(d, metric), algorithm] = avg_score
                 results_std.loc[(d, metric), algorithm] = std_score

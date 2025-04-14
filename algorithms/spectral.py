@@ -26,7 +26,6 @@ def plot_clust(G: nx.Graph, clusters):
     plt.axis("off")
     plt.show()
 
-
 def spectral(G: nx.Graph, K: int, plot: bool=False):
     """Perform Spectral Clustering on a graph.
 
@@ -48,8 +47,6 @@ def spectral(G: nx.Graph, K: int, plot: bool=False):
         affinity="precomputed", 
         random_state=42
     )
-    #spectral_clustering.fit(A)
-    #clusters = spectral_clustering.labels_
     clusters = spectral_clustering.fit_predict(A)
     
     if plot:
