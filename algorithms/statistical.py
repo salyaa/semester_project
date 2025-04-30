@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 # Use graph-tool 
 # (https://graph-tool.skewed.de/static/doc/demos/inference/inference.html)
 # OR Use PyMC / networkx
-def bayesianInf(G: gt.Graph, seed: int = 42, plot: bool = False):
+def bayesianInf(G: gt.Graph, seed: int = 42, deg_corr: bool = False, plot: bool = False):
     """
     Perform Bayesian inference on a graph using a degree-corrected stochastic block model (DC-SBM).
     
@@ -22,7 +22,7 @@ def bayesianInf(G: gt.Graph, seed: int = 42, plot: bool = False):
     if seed is not None:
         np.random.seed(seed)  
 
-    state = gt.minimize_blockmodel_dl(G, state_args=dict(deg_corr=False))
+    state = gt.minimize_blockmodel_dl(G, state_args=dict(deg_corr=deg_corr))
     #state.mcmc_sweep(niter=100)
     clusters = state.get_blocks()
     
@@ -46,7 +46,7 @@ def bayesianInf(G: gt.Graph, seed: int = 42, plot: bool = False):
                 output_size=(600, 600))
     return clusters
 
-def bayesianInfFixedK(G: gt.Graph, K: int=5, seed: int = 42, plot: bool = False):
+def bayesianInfFixedK(G: gt.Graph, K: int=5, seed: int = 42, deg_corr: bool = False, plot: bool = False):
     """
     Perform Bayesian inference on a graph using a degree-corrected stochastic block model (DC-SBM).
     
@@ -63,7 +63,7 @@ def bayesianInfFixedK(G: gt.Graph, K: int=5, seed: int = 42, plot: bool = False)
     if seed is not None:
         np.random.seed(seed)
 
-    state = gt.minimize_blockmodel_dl(G, state_args=dict(B=K, deg_corr=False))
+    state = gt.minimize_blockmodel_dl(G, state_args=dict(B=K, deg_corr=deg_corr))
     clusters = state.get_blocks()
     
     if plot and "pos" in G.vp:

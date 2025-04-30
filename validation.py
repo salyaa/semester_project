@@ -10,8 +10,8 @@ from SBM.sbm_generation import sbm_generation
 from ABCD.abcd_generation import *
 
 
-algorithms = ["bayesian", "bayesian_fixed_K", "spectral", "leiden", "louvain"]
-algo_fixed_K = ["bayesian_fixed_K", "spectral"]
+algorithms = ["bayesian", "bayesian_fixed_K", "spectral", "leiden", "louvain", "walktrap"]
+algo_fixed_K = ["bayesian_fixed_K", "spectral", "walktrap"]
 algo_not_fixed_K = [algo for algo in algorithms if algo not in algo_fixed_K]
 possible_metrics = [
     "adjusted_mutual_info_score", 
@@ -69,12 +69,16 @@ def compute_score(metric, algorithm, graphs, block_membership, graph_type: str="
                     gt_graph.add_vertex(n=graph.vcount())
                     gt_graph.add_edge_list(graph_edges)
                     graph = gt_graph
+            if graph_type == "sbm":
+                deg_corr = False
+            elif graph_type == "abcd":
+                deg_corr = True
             if algorithm == "bayesian":
-                clusters = bayesianInf(graph)
+                clusters = bayesianInf(graph, deg_corr=deg_corr)
             else:
-                clusters = bayesianInfFixedK(G=graph, K=len(set(true_clusters)))
+                clusters = bayesianInfFixedK(G=graph, K=len(set(true_clusters)), deg_corr=deg_corr)
             predicted_clusters = clusters.a 
-            
+        
         elif algorithm == "spectral":
             from algorithms.spectral import spectral
             graph_nx = nx.Graph()
@@ -103,6 +107,10 @@ def compute_score(metric, algorithm, graphs, block_membership, graph_type: str="
             from algorithms.modularity_based import louvain, leiden
             method = leiden if algorithm == "leiden" else louvain
             clusters = method(graph)
+            predicted_clusters = clusters.membership
+        elif algorithm == "walktrap":
+            from algorithms.others import walktrap
+            clusters = walktrap(graph, K=len(set(true_clusters)))
             predicted_clusters = clusters.membership
         
         # Had issue with graph conversion, so test this:
@@ -180,6 +188,7 @@ def validation_range_K(range_K, modify: str="out", plot: bool=True, graph_type="
         title = f"Community detection performance across different scores ({graph_type.upper()}), varying the number of clusters K"
         #plot_results_range_K(results_mean, results_std, title, number_clusters)
         plot_results_generic(results_mean, results_std, param_name, "K", title)
+        #plot_single_score(results_mean, results_std, param_name, param_label="K", title=title)
         plot_inferred_K(number_clusters, range_K, param_name=param_name)
 
     return results_mean, number_clusters
@@ -250,6 +259,7 @@ def validation_range_p(range_p: np.array=None, K: int=3, n: int=1000, modify: st
         elif graph_type == "abcd":
             title = f"Community detection average performance for {K} communities across different scores (using ABCD graphs), modifying xi"
         plot_results_generic(results, results_std, param_name, title=title)
+        #plot_single_score(results, results_std, param_name, title=title)
         plot_inferred_K_fixed_param(number_clusters, range_p, param_name, K, f"Inferred Clusters vs {param_name} (K={K})")
 
     return results, number_clusters
@@ -284,11 +294,11 @@ def validation_range_n(range_n: np.array=None, K: int=3, modify: str="out", grap
     number_clusters = pd.DataFrame(index=range_n, columns=algorithms)
     
     for n in range_n:
-        assert n%K == 0
         if graph_type == "sbm":
-            graphs, _, memberships = sbm_generation(n=n, K=K, nb_probas=5, modify=modify)
+            graphs, _, memberships = sbm_generation(n=n, K=K, nb_probas=1, modify=modify)
         elif graph_type=="abcd":
-            graphs, _, memberships = abcd_equal_size_range_xi(num_graphs=5, xi_max=0.4, n=n, K=K)
+            assert n%K == 0
+            graphs, _, memberships = abcd_equal_size_range_xi(num_graphs=1, xi_max=0.4, n=n, K=K)
         for algorithm in algorithms:
             k_algo_counts = []
             for metric in possible_metrics:
@@ -300,7 +310,7 @@ def validation_range_n(range_n: np.array=None, K: int=3, modify: str="out", grap
                 k_algo_counts.extend(cluster_dict.values())
             number_clusters.loc[n, algorithm] = np.mean(k_algo_counts)
         print(f"Completed {param_name} = {n}.")
-        
+    
     ## Save the results in a csv file
     name_table = f"evaluations/scores_K{K}_{param_name}_from{range_n[0]}to{range_n[-1]}_p{modify}.csv"
     results.to_csv(name_table)
@@ -309,6 +319,7 @@ def validation_range_n(range_n: np.array=None, K: int=3, modify: str="out", grap
     if plot:
         title = f"Community detection average performance for {K} communities across different scores, using {graph_type.upper()} graphs varying the number of nodes n"
         plot_results_generic(results, results_std, param_name, title=title)
+        #plot_single_score(results, results_std, param_name, title=title)
         plot_inferred_K_fixed_param(
             number_clusters, 
             param_range=range_n, 
@@ -356,7 +367,8 @@ def validation_range_c_min(num_graphs: int, K: int=5,  n: int=1000, c_max: int=1
     
     if plot:
         title = f"Community detection average performance for {K} communities across different scores, using ABCD graphs varying {param_name}"
-        plot_results_generic(results, results_std, param_name, title=title)
+        #plot_results_generic(results, results_std, param_name, title=title)
+        plot_single_score(results, results_std, param_name, title=title)
         plot_inferred_K_fixed_param(
             number_clusters, 
             param_range=range_c, 
@@ -403,7 +415,8 @@ def validation_range_d_max(num_graphs: int, K: int=5,  n: int=1000, d_min: int=5
     
     if plot:
         title = f"Community detection average performance for {K} communities across different scores, using ABCD graphs varying d_max"
-        plot_results_generic(results, results_std, param_name=param_name, title=title)
+        #plot_results_generic(results, results_std, param_name=param_name, title=title)
+        plot_single_score(results, results_std, param_name, title=title)
         plot_inferred_K_fixed_param(
             number_clusters, 
             param_range=range_d, 
@@ -474,12 +487,8 @@ def plot_results_generic(
     from IPython.display import clear_output
     clear_output(wait=True)
 
-    all_algos = results_mean.columns
     metrics = results_mean.index.get_level_values("Metric").unique()
     param_values = results_mean.index.get_level_values(param_name).unique()
-
-    fixed_K_algos = ["bayesian_fixed_K", "spectral"]
-    non_fixed_K_algos = [a for a in all_algos if a not in fixed_K_algos]
 
     f, axs = plt.subplots(2, len(metrics), figsize=(5 * len(metrics), 10), sharex=True, sharey=True)
 
@@ -490,7 +499,7 @@ def plot_results_generic(
         avg_scores = results_mean.xs(metric, level="Metric")
         std_scores = results_std.xs(metric, level="Metric")
 
-        for row, algo_group in enumerate([non_fixed_K_algos, fixed_K_algos]):
+        for row, algo_group in enumerate([algo_not_fixed_K, algo_fixed_K]):
             ax = axs[row][col]
             for algo in algo_group:
                 mean_values = avg_scores[algo].astype(float)
@@ -512,3 +521,52 @@ def plot_results_generic(
     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
     plt.show()
 
+def plot_single_score(
+    results_mean: pd.DataFrame,
+    results_std: pd.DataFrame,
+    param_name: str,
+    metric: str="v_measure_score",
+    param_label: str = None,
+    title: str = None
+):
+    """
+    Plot a single metric across varying parameter values, showing fixed-K and inferred-K separately.
+
+    Args:
+        metric (str): The metric to plot (e.g., "adjusted_rand_score").
+        results_mean (pd.DataFrame): Mean scores indexed by (param, "Metric").
+        results_std (pd.DataFrame): Standard deviations indexed similarly.
+        param_name (str): The parameter being varied (e.g., "K", "xi").
+        param_label (str): Label for x-axis (optional).
+        title (str): Title of the plot.
+    """
+    fixed_K_algos = ["bayesian_fixed_K", "spectral", "walktrap"]
+    all_algos = results_mean.columns
+    non_fixed_K_algos = [a for a in all_algos if a not in fixed_K_algos]
+
+    param_values = results_mean.index.get_level_values(param_name).unique()
+
+    mean_df = results_mean.xs(metric, level="Metric")
+    std_df = results_std.xs(metric, level="Metric")
+
+    fig, axs = plt.subplots(2, 1, figsize=(8, 10), sharex=True)
+
+    for row, algo_group in enumerate([non_fixed_K_algos, fixed_K_algos]):
+        ax = axs[row]
+        for algo in algo_group:
+            mean = mean_df[algo].astype(float)
+            std = std_df[algo].astype(float)
+            std = np.nan_to_num(std, nan=0.0)
+
+            ax.plot(param_values, mean, label=algo, marker="o")
+            ax.fill_between(param_values, mean - std, mean + std, alpha=0.2)
+
+        ax.set_ylabel("Score")
+        ax.grid(True)
+        ax.set_title(f"{metric.replace('_', ' ').title()} ({'Inferred K' if row == 0 else 'Fixed K'})")
+        ax.legend()
+
+    axs[1].set_xlabel(param_label if param_label else param_name)
+    fig.suptitle(title or f"Evaluation of {metric.replace('_', ' ').title()}", fontsize=14)
+    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+    plt.show()

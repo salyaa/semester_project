@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import os
 
 
-algorithms = ["bayesian", "bayesian_fixed_K", "spectral", "leiden", "louvain"]
+algorithms = ["bayesian", "bayesian_fixed_K", "spectral", "leiden", "louvain", "walktrap"]
 possible_metrics = [
     "adjusted_mutual_info_score", 
     "adjusted_rand_score", 
@@ -159,7 +159,8 @@ def running_time_vs_K(
         if graph_type == "sbm":
             graphs, _, b = sbm_generation(n=n, K=K, nb_probas=nb_probas)
         elif graph_type == "abcd":
-            graphs, _, b = abcd_equal_size_range_xi(num_graphs=nb_probas, K=K)
+            if n%K==0:
+                graphs, _, b = abcd_equal_size_range_xi(num_graphs=nb_probas, n=n, K=K)
         
         for algo in algorithms:
             t = compute_running_time(metric, algo, graphs, b, graph_type, n_runs)
