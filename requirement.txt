@@ -3,7 +3,8 @@ networkx
 graph-tool
 sklearn
 numpy
+pandas
 scipy
 matplotlib
-juliacall
-yaml
+subprocess 
+os

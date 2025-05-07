@@ -48,13 +48,6 @@ def sbm_generation(n: int = 1000, K: int = 3, nb_probas: int = 5, range_p: np.ar
 
         block_membership = np.concatenate([[k] * size for k, size in enumerate(group_sizes)])
 
-        # G, b = gt.random_graph(
-        #                     n, 
-        #                     lambda : (np.random.poisson(5), np.random.poisson(5)),
-        #                     model="blockmodel",
-        #                     edge_probs=communities_matrix,
-        #                     block_membership=block_membership
-        # )
         G = ig.Graph.SBM(np.sum(group_sizes), communities_matrix, group_sizes)
         graphs[f"SBM_{modify}_{i}"] = G  
         memberships[f"SBM_{modify}_{i}"] = block_membership

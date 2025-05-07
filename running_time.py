@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import os
 
 
-algorithms = ["bayesian", "bayesian_fixed_K", "spectral", "leiden", "louvain", "walktrap"]
+algorithms = ["bayesian", "spectral", "leiden", "louvain", "walktrap"]
 possible_metrics = [
     "adjusted_mutual_info_score", 
     "adjusted_rand_score", 
@@ -190,4 +190,3 @@ def plot_runtime_vs_K(df, title="Runtime vs Number of Communities"):
     plt.legend()
     plt.tight_layout()
     plt.show()
-

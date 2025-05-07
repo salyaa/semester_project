@@ -118,8 +118,7 @@ def load_communities(graph: ig.Graph, com_file: str, zero_index: bool = True) ->
     graph.vs["community"] = membership
     return membership
 
-
-def abcd_generation(filename: str, K: int=None, d_min: int=5, d_max: int=50, c_min: int=50, c_max: int=1000, n: int=1000, xi: float=0.2, script_path: str="ABCD/ABCDSampler.jl"):
+def abcd_generation(filename: str, K: int=None, d_min: int=5, d_max: int=50, c_min: int=50, c_max: int=1000, n: int=3000, xi: float=0.2, script_path: str="ABCD/ABCDSampler.jl"):
     """Generate an ABCD graph using the Julia ABCDGraphGenerator.jl package.
     The graph is generated based on the specified parameters and saved to the specified directory.
 
@@ -178,14 +177,14 @@ def abcd_generation(filename: str, K: int=None, d_min: int=5, d_max: int=50, c_m
 
     return graph, block_membership
 
-def abcd_equal_size_range_K(range_K: np.array=None, xi: float=0.2, n: int=1000):
+def abcd_equal_size_range_K(range_K: np.array=None, xi: float=0.4, n: int=3000, n_graphs: int=5):
     """Generate a range of ABCD graphs with equal-sized communities.
     The number of communities is determined by the range_K parameter.
     The graphs are generated based on the specified parameters and saved to the specified directory.
     Args:
         range_K (np.array, optional): Range of community sizes. If None, the range is determined based on n. Defaults to None.
-        xi (float, optional): Fraction of edges to fall in background graph. Defaults to 0.2.
-        n (int, optional): Number of vertices in the graph. Defaults to 1000.
+        xi (float, optional): Fraction of edges to fall in background graph. Defaults to 0.4.
+        n (int, optional): Number of vertices in the graph. Defaults to 3000.
     Returns:
     """
     if range_K is None:
@@ -195,10 +194,12 @@ def abcd_equal_size_range_K(range_K: np.array=None, xi: float=0.2, n: int=1000):
     abcd_graphs = {}
     memberships = {}
     for i, K in enumerate(range_K):
-        graph, b = abcd_generation(f"graph_{i}_K={K}", K=K, n=n, xi=xi)
-        if graph is not None:
-            abcd_graphs[f"graph_{i}"] = graph
-            memberships[f"graph_{i}"] = b
+        for rep in range(n_graphs):
+            name = f"ABCD_K{K}_rep{rep}"
+            graph, b = abcd_generation(f"graph_{i}_K={K}", K=K, n=n, xi=xi)
+            if graph is not None:
+                abcd_graphs[name] = graph
+                memberships[name] = b
     print("Graph generated!")
     return abcd_graphs, memberships
 

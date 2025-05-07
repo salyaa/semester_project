@@ -9,4 +9,4 @@ def walktrap(graph: ig.Graph, K: int, steps: int=4):
         list: List of communities.
     """
     communities = graph.community_walktrap(steps=steps)
-    return communities.as_clustering(n = K)
+    return communities.as_clustering(n =  K)
