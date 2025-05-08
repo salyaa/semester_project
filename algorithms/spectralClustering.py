@@ -13,7 +13,6 @@ from sklearn.cluster import KMeans, SpectralClustering
 import selfrepresentation as selfrepresentation
 
 
-
 # =============================================================================
 # SPECTRAL CLUSTERING: VARIOUS FORMS
 # =============================================================================
@@ -48,7 +47,7 @@ def spectralClustering_dcbm( A , n_clusters ):
     "Community detection in degree-corrected block models" 
     The Annals of Statistics, Ann. Statist. 46(5), 2153-2185 (2018)
 
-    
+
     Parameters
     ----------
     A : {array-like, sparse matrix} of shape (n, n)
@@ -69,9 +68,9 @@ def spectralClustering_dcbm( A , n_clusters ):
     for i in range( n ):
         if np.linalg.norm( hatP[i,:], ord = 1) != 0:
             hatP_rowNormalized[i,:] = hatP[i,:] / np.linalg.norm( hatP[i,:], ord = 1)
-    
+
     z = KMeans(n_clusters = n_clusters, n_init = 'auto' ).fit_predict( hatP_rowNormalized ) + np.ones( n )
-    
+
     return z.astype(int) 
 
 
@@ -108,7 +107,6 @@ def spectralClustering_pabm( A, n_clusters, version = 'subspace' ):
         z = model.labels_ + np.ones( n )
     
     return z.astype(int)
-
 
 
 def orthogonalSpectralClustering( A, n_clusters ):
@@ -183,13 +181,9 @@ def fast_spectral_cluster( A, n_clusters: int):
     return z.astype(int) 
 
 
-
-
-
 # =============================================================================
 # ADDITIONAL FUNCTIONS
 # =============================================================================
-
 
 
 def degree_vector( A ):
@@ -220,4 +214,3 @@ def degree_matrix( A , power=1 ):
     D = sp.sparse.spdiags( d, 0, n, n)
 
     return D.tocsr()
-

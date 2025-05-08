@@ -239,19 +239,13 @@ def validation_range_p(range_p: np.array=None, K: int=3, n: int=1000, n_reps: in
     number_clusters = pd.DataFrame(index=range_p, columns=algorithms)
 
     for p in range_p:
-        graphs = {}
-        memberships = {}
-        for rep in range(n_reps):
-            if graph_type == "sbm":
-                graph, _, memberships = sbm_generation(K=K, range_p=np.array([p]), modify=modify)
-            elif graph_type == "abcd":
-                graph, _, memberships = abcd_equal_size_range_xi(range_xi=[p], K=K, n=n)
-            else:
-                raise ValueError("Invalid graph type. Must be 'sbm' or 'abcd'.")
-            name0 = list(graph.keys())[0]
-            new_name = f"{name0}_{rep}"
-            graphs[new_name] = graph[name0]
-            memberships[new_name] = memberships[name0]
+        if graph_type == "sbm":
+            n_reps_p = np.full(n_reps, p)
+            graphs, _, memberships = sbm_generation(K=K, range_p=n_reps_p, modify=modify)
+        elif graph_type == "abcd":
+            graphs, _, memberships = abcd_equal_size_range_xi(range_xi=[p], n_reps=n_reps, K=K, n=n)
+        else:
+            raise ValueError("Invalid graph type. Must be 'sbm' or 'abcd'.")
         actual_rep = len(graphs)
 
         for algorithm in algorithms:
@@ -276,7 +270,7 @@ def validation_range_p(range_p: np.array=None, K: int=3, n: int=1000, n_reps: in
 
     if plot:
         if graph_type == "sbm":
-            title = f"Community detection average performance for {K} communities across different scores (using SBM graphs), modifying {param_name}"
+            title = f"Community detection average performance for {K} communities across different scores (using SBM graphs), modifying {param_name} (n={n})"
         elif graph_type == "abcd":
             title = f"Community detection average performance for {K} communities across different scores (using ABCD graphs), modifying xi"
         plot_results_generic(results, results_std, param_name, title=title)

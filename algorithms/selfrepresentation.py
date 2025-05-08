@@ -102,7 +102,7 @@ class SelfRepresentation(BaseEstimator, ClusterMixin):
             self.affinity_matrix_ = 0.5 * (np.absolute(normalized_representation_matrix_) + np.absolute(normalized_representation_matrix_.T))
         elif self.affinity == 'nearest_neighbors':
             neighbors_graph = kneighbors_graph(normalized_representation_matrix_, 3, 
-		                                       mode='connectivity', include_self=False)
+		                                    mode='connectivity', include_self=False)
             self.affinity_matrix_ = 0.5 * (neighbors_graph + neighbors_graph.T)
 
     def _spectral_clustering(self):
@@ -111,14 +111,14 @@ class SelfRepresentation(BaseEstimator, ClusterMixin):
         
         laplacian = sparse.csgraph.laplacian(affinity_matrix_, normed=True)
         _, vec = sparse.linalg.eigsh(sparse.identity(laplacian.shape[0]) - laplacian, 
-                                     k=self.n_clusters, sigma=None, which='LA')
+                                    k=self.n_clusters, sigma=None, which='LA')
         embedding = normalize(vec)
         _, self.labels_, _ = cluster.k_means(embedding, self.n_clusters, 
-                                             random_state=random_state, n_init=self.n_init)
+                                            random_state=random_state, n_init=self.n_init)
 
 
 def active_support_elastic_net(X, y, alpha, tau=1.0, algorithm='spams', support_init='knn', 
-                               support_size=100, maxiter=40):
+                            support_size=100, maxiter=40):
     """An active support based algorithm for solving the elastic net optimization problem
         min_{c} tau ||c||_1 + (1-tau)/2 ||c||_2^2 + alpha / 2 ||y - c X ||_2^2.
 		
@@ -162,12 +162,10 @@ def active_support_elastic_net(X, y, alpha, tau=1.0, algorithm='spams', support_
     for _ in range(maxiter):
         Xs = X[supp, :]
         if algorithm == 'spams':
-            cs = spams.lasso(np.asfortranarray(y.T), D=np.asfortranarray(Xs.T), 
-                             lambda1=tau*alpha, lambda2=(1.0-tau)*alpha)
-            cs = np.asarray(cs.todense()).T
+            raise NotImplementedError("spams is not implemented")
         else:
             cs = sparse_encode(y, Xs, algorithm=algorithm, alpha=alpha)
-      
+
         delta = (y - np.dot(cs, Xs)) / alpha
 		
         obj = tau * np.sum(np.abs(cs[0])) + (1.0 - tau)/2.0 * np.sum(np.power(cs[0], 2.0)) + alpha/2.0 * np.sum(np.power(delta, 2.0))
@@ -198,7 +196,7 @@ def active_support_elastic_net(X, y, alpha, tau=1.0, algorithm='spams', support_
     c[supp] = cs
     return c
 
-  
+
 def elastic_net_subspace_clustering(X, gamma=50.0, gamma_nz=True, tau=1.0, algorithm='lasso_lars', 
                                     active_support=True, active_support_params=None, n_nonzero=50):
     """Elastic net subspace clustering (EnSC) [1]. 
@@ -302,12 +300,12 @@ def elastic_net_subspace_clustering(X, gamma=50.0, gamma_nz=True, tau=1.0, algor
                 else:
                     c = sparse_encode(y, X, algorithm=algorithm, alpha=alpha)[0]
         else:
-          warnings.warn("algorithm {} not found".format(algorithm))
-	    	  
+            warnings.warn("algorithm {} not found".format(algorithm))
+
         index = np.flatnonzero(c)
         if index.size > n_nonzero:
         #  warnings.warn("The number of nonzero entries in sparse subspace clustering exceeds n_nonzero")
-          index = index[np.argsort(-np.absolute(c[index]))[0:n_nonzero]]
+            index = index[np.argsort(-np.absolute(c[index]))[0:n_nonzero]]
         rows[curr_pos:curr_pos + len(index)] = i
         cols[curr_pos:curr_pos + len(index)] = index
         vals[curr_pos:curr_pos + len(index)] = c[index]
@@ -317,7 +315,6 @@ def elastic_net_subspace_clustering(X, gamma=50.0, gamma_nz=True, tau=1.0, algor
 
 #   affinity = sparse.csr_matrix((vals, (rows, cols)), shape=(n_samples, n_samples)) + sparse.csr_matrix((vals, (cols, rows)), shape=(n_samples, n_samples))
     return sparse.csr_matrix((vals, (rows, cols)), shape=(n_samples, n_samples))
-
 
 class ElasticNetSubspaceClustering(SelfRepresentation):
     """Elastic net subspace clustering (EnSC) [1]. 
@@ -393,7 +390,7 @@ class ElasticNetSubspaceClustering(SelfRepresentation):
     [3] C. Lu, et al. Robust and efficient subspace segmentation via least squares regression, ECCV 2012
     """
     def __init__(self, n_clusters=8, affinity='symmetrize', random_state=None, n_init=20, n_jobs=1, gamma=50.0, gamma_nz=True, tau=1.0, 
-                 algorithm='lasso_lars', active_support=True, active_support_params=None, n_nonzero=50):
+                algorithm='lasso_lars', active_support=True, active_support_params=None, n_nonzero=50):
         self.gamma = gamma
         self.gamma_nz = gamma_nz
         self.tau = tau
@@ -406,10 +403,9 @@ class ElasticNetSubspaceClustering(SelfRepresentation):
     
     def _self_representation(self, X):
         self.representation_matrix_ = elastic_net_subspace_clustering(X, self.gamma, self.gamma_nz, 
-                                                                      self.tau, self.algorithm, 
-		                                                              self.active_support, self.active_support_params, 
-		                                                              self.n_nonzero)
-					
+                                                                    self.tau, self.algorithm, 
+		                                                            self.active_support, self.active_support_params, 
+		                                                            self.n_nonzero)
 
 def sparse_subspace_clustering_orthogonal_matching_pursuit(X, n_nonzero=10, thr=1.0e-6):
     """Sparse subspace clustering by orthogonal matching pursuit (SSC-OMP)
@@ -467,7 +463,6 @@ def sparse_subspace_clustering_orthogonal_matching_pursuit(X, n_nonzero=10, thr=
 
 #   affinity = sparse.csr_matrix((vals, (rows, cols)), shape=(n_samples, n_samples)) + sparse.csr_matrix((vals, (cols, rows)), shape=(n_samples, n_samples))
     return sparse.csr_matrix((vals, (rows, cols)), shape=(n_samples, n_samples))
-					
 
 class SparseSubspaceClusteringOMP(SelfRepresentation):
     """Sparse subspace clustering by orthogonal matching pursuit (SSC-OMP). 
@@ -511,7 +506,6 @@ class SparseSubspaceClusteringOMP(SelfRepresentation):
     def _self_representation(self, X):
         self.representation_matrix_ = sparse_subspace_clustering_orthogonal_matching_pursuit(X, self.n_nonzero, self.thr)
 
-
 def least_squares_subspace_clustering(X, gamma=10.0, exclude_self=False):
     """Least squares subspace clustering. 
     Compute self-representation matrix C by solving the following optimization problem
@@ -554,7 +548,6 @@ def least_squares_subspace_clustering(X, gamma=10.0, exclude_self=False):
         D = D / D.diagonal()[None,:]
         np.fill_diagonal(D, 0.0)
         return -1.0 * D.T
-
 
 class LeastSquaresSubspaceClustering(SelfRepresentation):
     """Least squares subspace clustering.

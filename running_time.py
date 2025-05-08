@@ -1,5 +1,6 @@
 import time 
 import pandas as pd 
+import numpy as np 
 from SBM.sbm_generation import *
 from ABCD.abcd_generation import *
 from validation import *
@@ -33,12 +34,11 @@ def compute_running_time(metric, algorithm, graphs, memberships, graph_type: str
     """
     times = []
     for _ in range(n_runs):
-        start = time.time()
+        start = time.perf_counter()
         _, _, _, _ = compute_score(metric, algorithm, graphs, memberships, graph_type)
-        times.append(time.time() - start)
+        times.append(time.perf_counter() - start)
     avg_time = np.mean(times)
     return avg_time
-
 
 def running_time_analysis(K: int=3, nb_probas: int=5, modify : str="out", graph_type: str="sbm", plot: bool=True):
     """Generate table with the average running times for each possible pairs (metric, algorithm).
@@ -61,8 +61,8 @@ def running_time_analysis(K: int=3, nb_probas: int=5, modify : str="out", graph_
     results = pd.DataFrame(index=possible_metrics, columns=algorithms)
     for algorithm in algorithms:
         for metric in possible_metrics:
-            time = compute_running_time(metric, algorithm, graphs, b, graph_type)
-            results.loc[metric, algorithm] = time
+            t = compute_running_time(metric, algorithm, graphs, b, graph_type)
+            results.loc[metric, algorithm] = t
     
     ## Save results in a csv file
     os.makedirs("time_evaluations", exist_ok=True)
@@ -92,7 +92,6 @@ def plot_rt(csv_path: str=None):
     plt.grid(True)
     plt.tight_layout()
     plt.show()
-
 
 def running_time_vs_n(range_n: np.array=None, K: int=5, n_runs: int=10, metric: str="adjusted_rand_score", graph_type: str="sbm", plot: bool=True):
     """Compute the running time for graphs of varying size, i.e., different number of nodes, all other graph generation's arguments are fixed ."""
@@ -149,6 +148,7 @@ def running_time_vs_K(
 ):
     """Compute the running time for various number of clusters, all other graph generation's arguments are fixed."""
     assert graph_type in graph_types
+    assert metric in possible_metrics
     
     os.makedirs("time_evaluations", exist_ok=True)
     
@@ -165,16 +165,35 @@ def running_time_vs_K(
         for algo in algorithms:
             t = compute_running_time(metric, algo, graphs, b, graph_type, n_runs)
             results.loc[K, algo] = t
-
-    # Save results
-    file_path = f"time_evaluations/runtime_vs_K_n{n}.csv"
-    results.to_csv(file_path)
-    print(f"\nSaved to {file_path}")
     
     if plot:
         plot_runtime_vs_K(results)
     return results
 
+def rt_vs_K_algos(range_K: np.array, n:int=3000, nb_probas: int=5, n_runs: int=10, graph_type: str="sbm", plot: bool=True):
+    assert graph_type in graph_types
+    results = {}
+    for metric in possible_metrics:
+        print(f"\nTesting metric = {metric}")
+        results[metric] = pd.DataFrame(index=range_K, columns=algorithms)
+        for K in range_K:
+            if graph_type == "sbm":
+                graphs, _, b = sbm_generation(n=n, K=K, nb_probas=nb_probas)
+            elif graph_type == "abcd":
+                graphs, _, b = abcd_equal_size_range_xi(num_graphs=nb_probas, n=n, K=K)
+            for algo in algorithms:
+                t = compute_running_time(metric, algo, graphs, b, graph_type, n_runs)
+                results[metric].loc[K, algo] = t
+        print(f"\nTesting metric = {metric} done!")
+    # Save results
+    file_path = f"time_evaluations/runtime_vs_K_n{n}.csv"
+    for metric, df in results.items():
+        df.to_csv(file_path.replace(".csv", f"_{metric}.csv"))
+        print(f"\nSaved to {file_path.replace('.csv', f'_{metric}.csv')}")
+    if plot:
+        for metric, df in results.items():
+            plot_runtime_vs_K(df, title=f"Runtime vs Number of Communities ({metric})")
+    return results
 
 def plot_runtime_vs_K(df, title="Runtime vs Number of Communities"):
     from IPython.display import clear_output

@@ -203,7 +203,7 @@ def abcd_equal_size_range_K(range_K: np.array=None, xi: float=0.4, n: int=3000, 
     print("Graph generated!")
     return abcd_graphs, memberships
 
-def abcd_equal_size_range_xi(range_xi: np.array=None, num_graphs: int=5, xi_max: float = 1, n: int=1000, K: int=10, c_min: int=50, c_max:int=1000, d_min:int=5, d_max: int=50):
+def abcd_equal_size_range_xi(range_xi: np.array=None, num_graphs: int=5, n_reps: int=15, xi_max: float = 1, n: int=1000, K: int=10, c_min: int=50, c_max:int=1000, d_min:int=5, d_max: int=50):
     """Generate a range of ABCD graphs with equal-sized communities.
     The number of communities is determined by the range_xi parameter.
 
@@ -231,11 +231,13 @@ def abcd_equal_size_range_xi(range_xi: np.array=None, num_graphs: int=5, xi_max:
     abcd_graphs = {}
     memberships = {}
     for i, xi in enumerate(range_xi):
-        graph, b = abcd_generation(f"graph_{i}_xi={xi:.2f}", K=K, d_min=d_min, d_max=d_max, c_min=c_min, c_max=c_max, n=n, xi=xi)
-        if graph is not None:
-            abcd_graphs[f"graph_{i}"] = graph
-            memberships[f"graph_{i}"] = b
-    
+        for rep in range(n_reps):
+            name = f"ABCD{i}_xi{xi:.2f}_rep{rep}"
+            graph, b = abcd_generation(f"graph_{i}_xi={xi:.2f}", K=K, d_min=d_min, d_max=d_max, c_min=c_min, c_max=c_max, n=n, xi=xi)
+            if graph is not None:
+                abcd_graphs[name] = graph
+                memberships[name] = b
+        
     from IPython.display import clear_output
     clear_output(wait=True)
     return abcd_graphs, range_xi, memberships
