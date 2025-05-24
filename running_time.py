@@ -22,13 +22,12 @@ graph_types = ["sbm", "abcd"]
 
 def compute_running_time(metric, algorithm, graphs, memberships, graph_type: str="sbm", n_runs: int=10):
     """Compute running time for a certain (metric, algorithm) pair in order to compare algorithms' performance.
-
     Args:
         metric (str)
         algorithm (str)
         graphs (dict): Dictionary of ig.Graph to compute the scores on.
         n_runs (int, optional): Number of runs, in order to take the average. Defaults to 10.
-
+    
     Returns:
         avg_time (float): Average time for the pair after n_runs.
     """
@@ -42,7 +41,6 @@ def compute_running_time(metric, algorithm, graphs, memberships, graph_type: str
 
 def running_time_analysis(K: int=3, nb_probas: int=5, modify : str="out", graph_type: str="sbm", plot: bool=True):
     """Generate table with the average running times for each possible pairs (metric, algorithm).
-
     Args:
         K (int, optional): Number of clusters for the graph generation. Defaults to 3.
         nb_probas (int, optional): Number of graphs to generate. Defaults to 5.
@@ -113,10 +111,6 @@ def running_time_vs_n(range_n: np.array=None, K: int=5, n_runs: int=10, metric: 
             time = compute_running_time(metric, algorithm, graphs, b, graph_type, n_runs=n_runs)
             results.loc[n, algorithm] = time
         print(f"{n} done!")
-    
-    ## Save result in a csv
-    name_table = f"time_evaluations/runtime_vs_n_K{K}.csv"
-    results.to_csv(name_table)
     
     if plot:
         plot_runtime_vs_n(results)

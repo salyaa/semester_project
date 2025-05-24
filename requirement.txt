@@ -8,3 +8,5 @@ scipy
 matplotlib
 subprocess 
 os
+scipy
+tqdm
