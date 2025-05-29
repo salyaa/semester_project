@@ -1,5 +1,5 @@
 algorithms = ["bayesian", "spectral", "leiden", "louvain", "walktrap"]
-algorithms_sc = ["sc_bm", "sc_dcbm", "sc_pabm", "orth_sc"]
+algorithms_sc = ["spectral", "sc_bm", "sc_dcbm", "sc_pabm", "orth_sc"]
 algo_fixed_K = ["spectral", "walktrap"]
 algo_not_fixed_K = [algo for algo in algorithms if algo not in algo_fixed_K]
 possible_metrics = [

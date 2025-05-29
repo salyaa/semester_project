@@ -8,19 +8,10 @@ import matplotlib.pyplot as plt
 
 import os
 
-
-algorithms = ["bayesian", "spectral", "leiden", "louvain", "walktrap"]
-possible_metrics = [
-    "adjusted_mutual_info_score", 
-    "adjusted_rand_score", 
-    "v_measure_score",
-    "homogeneity_score",
-    "fowlkes_mallows_score"
-]
-graph_types = ["sbm", "abcd"]
+from constants import *
 
 
-def compute_running_time(metric, algorithm, graphs, memberships, graph_type: str="sbm", n_runs: int=10):
+def compute_running_time(metric, algorithm, graphs, memberships, graph_type: str="sbm", n_runs: int=10, possible_algorithms=algorithms):
     """Compute running time for a certain (metric, algorithm) pair in order to compare algorithms' performance.
     Args:
         metric (str)
@@ -34,12 +25,12 @@ def compute_running_time(metric, algorithm, graphs, memberships, graph_type: str
     times = []
     for _ in range(n_runs):
         start = time.perf_counter()
-        _, _, _, _ = compute_score(metric, algorithm, graphs, memberships, graph_type)
+        _, _, _, _ = compute_score(metric, algorithm, graphs, memberships, possible_algorithms, graph_type)
         times.append(time.perf_counter() - start)
     avg_time = np.mean(times)
     return avg_time
 
-def running_time_analysis(K: int=3, nb_probas: int=5, modify : str="out", graph_type: str="sbm", plot: bool=True):
+def running_time_analysis(K: int=3, n_runs:int=5, nb_probas: int=5, modify : str="out", graph_type: str="sbm", possible_algorithms=algorithms, plot: bool=True):
     """Generate table with the average running times for each possible pairs (metric, algorithm).
     Args:
         K (int, optional): Number of clusters for the graph generation. Defaults to 3.
@@ -57,9 +48,9 @@ def running_time_analysis(K: int=3, nb_probas: int=5, modify : str="out", graph_
     elif graph_type == "abcd":
         graphs, _, b = abcd_equal_size_range_xi(num_graphs=nb_probas, K=K)
     results = pd.DataFrame(index=possible_metrics, columns=algorithms)
-    for algorithm in algorithms:
+    for algorithm in possible_algorithms:
         for metric in possible_metrics:
-            t = compute_running_time(metric, algorithm, graphs, b, graph_type)
+            t = compute_running_time(metric, algorithm, graphs, b, graph_type, n_runs=n_runs, possible_algorithms=possible_algorithms)
             results.loc[metric, algorithm] = t
     
     ## Save results in a csv file
@@ -91,7 +82,7 @@ def plot_rt(csv_path: str=None):
     plt.tight_layout()
     plt.show()
 
-def running_time_vs_n(range_n: np.array=None, K: int=5, n_runs: int=10, metric: str="adjusted_rand_score", graph_type: str="sbm", plot: bool=True):
+def running_time_vs_n(range_n: np.array=None, K: int=5, n_runs: int=10, metric: str="adjusted_rand_score", graph_type: str="sbm", possible_algorithms=algorithms, plot: bool=True):
     """Compute the running time for graphs of varying size, i.e., different number of nodes, all other graph generation's arguments are fixed ."""
     assert graph_type in graph_types
     
@@ -100,15 +91,15 @@ def running_time_vs_n(range_n: np.array=None, K: int=5, n_runs: int=10, metric: 
         range_n = [n for n in range_n if n%K == 0]
     print(range_n)
     
-    results = pd.DataFrame(index=range_n, columns=algorithms)
+    results = pd.DataFrame(index=range_n, columns=possible_algorithms)
     
     for n in range_n:
         if graph_type == "sbm":
             graphs, _, b = sbm_generation(n=n, K=K, nb_probas=1)
         elif graph_type == "abcd":
             graphs, _, b = abcd_equal_size_range_xi(num_graphs=1, n=n, K=K)
-        for algorithm in algorithms:
-            time = compute_running_time(metric, algorithm, graphs, b, graph_type, n_runs=n_runs)
+        for algorithm in possible_algorithms:
+            time = compute_running_time(metric, algorithm, graphs, b, graph_type, n_runs=n_runs, possible_algorithms=possible_algorithms)
             results.loc[n, algorithm] = time
         print(f"{n} done!")
     
@@ -138,6 +129,7 @@ def running_time_vs_K(
     nb_probas=1, 
     n_runs=10,
     graph_type: str="sbm",
+    possible_algorithms=algorithms,
     plot: bool=True
 ):
     """Compute the running time for various number of clusters, all other graph generation's arguments are fixed."""
@@ -146,7 +138,7 @@ def running_time_vs_K(
     
     os.makedirs("time_evaluations", exist_ok=True)
     
-    results = pd.DataFrame(index=range_K, columns=algorithms)
+    results = pd.DataFrame(index=range_K, columns=possible_algorithms)
 
     for K in range_K:
         print(f"\nTesting K = {K}")
@@ -156,20 +148,20 @@ def running_time_vs_K(
             if n%K==0:
                 graphs, _, b = abcd_equal_size_range_xi(num_graphs=nb_probas, n=n, K=K)
         
-        for algo in algorithms:
-            t = compute_running_time(metric, algo, graphs, b, graph_type, n_runs)
+        for algo in possible_algorithms:
+            t = compute_running_time(metric, algo, graphs, b, graph_type, n_runs, possible_algorithms)
             results.loc[K, algo] = t
     
     if plot:
         plot_runtime_vs_K(results)
     return results
 
-def rt_vs_K_algos(range_K: np.array, n:int=3000, nb_probas: int=5, n_runs: int=10, graph_type: str="sbm", plot: bool=True):
+def rt_vs_K_algos(range_K: np.array, n:int=3000, nb_probas: int=5, n_runs: int=10, graph_type: str="sbm", possible_algorithms = algorithms, plot: bool=True):
     assert graph_type in graph_types
     results = {}
     for metric in possible_metrics:
         print(f"\nTesting metric = {metric}")
-        results[metric] = pd.DataFrame(index=range_K, columns=algorithms)
+        results[metric] = pd.DataFrame(index=range_K, columns=possible_algorithms)
         for K in range_K:
             if graph_type == "sbm":
                 graphs, _, b = sbm_generation(n=n, K=K, nb_probas=nb_probas)

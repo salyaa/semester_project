@@ -4,13 +4,13 @@ import pandas as pd
 import matplotlib as mpl
 
 mpl.rcParams.update({
-    "axes.titlesize":   16,  # subplot titles
-    "axes.labelsize":   16,  # x/y labels
-    "xtick.labelsize":  12,  # x tick labels
-    "ytick.labelsize":  12,  # y tick labels
-    "legend.fontsize":  12,  # legend text
+    "axes.titlesize":   16,  
+    "axes.labelsize":   16,  
+    "xtick.labelsize":  12,  
+    "ytick.labelsize":  12,  
+    "legend.fontsize":  12,  
     "legend.title_fontsize": 13,
-    "figure.titlesize": 17   # suptitle
+    "figure.titlesize": 17   
 })
 
 from constants import *
@@ -78,9 +78,9 @@ def plot_results_generic(
     param_vals  = results_mean.index.get_level_values(param_name).unique()
 
     fig, axs = plt.subplots(
-      2, len(metrics),
-      figsize=(5*len(metrics), 10),
-      sharex=True, sharey=True
+        2, len(metrics),
+        figsize=(5*len(metrics), 10),
+        sharex=True, sharey=True
     )
     if axs.ndim == 1:
         axs = np.array([[axs[0]], [axs[1]]])
@@ -132,7 +132,6 @@ def plot_results_generic_sc(
     metrics    = results_mean.index.get_level_values("Metric").unique()
     param_vals = results_mean.index.get_level_values(param_name).unique()
 
-    # One row, M columns (one per metric)
     fig, axs = plt.subplots(
         1, len(metrics),
         figsize=(5*len(metrics), 5),
@@ -165,56 +164,57 @@ def plot_results_generic_sc(
     plt.show()
 
 
+def plot_cluster_size_boxplots(cluster_sizes,
+                                true_cluster_sizes,
+                                param_range,
+                                param_name: str,
+                                title: str="Cluster‐size distributions"):
+    """
+    cluster_sizes:       dict[param → dict[algo → list of inferred cluster‐sizes]]
+    true_cluster_sizes:  dict[param → list of true cluster‐sizes]  (one list per param)
+    param_range:         list of parameter values
+    """
+    n_algos = len(algorithms)
+    fig, axes = plt.subplots(n_algos, 1,
+                            figsize=(6, 3*n_algos),
+                            sharex=True)
 
-def plot_cluster_size_boxplots(
-    cluster_sizes,      # dict[param → dict[algo → list of inferred sizes]]
-    true_cluster_sizes,# dict[param → list of true sizes]
-    param_range, 
-    param_name: str,
-    title: str = "Distribution of cluster sizes"
-):
-    fig, axes = plt.subplots(
-        len(algorithms), 1,
-        figsize=(6, 3*len(algorithms)),
-        sharex=True
-    )
+    if n_algos == 1:
+        axes = [axes]
+
+    if len(param_range) > 1:
+        width = (param_range[1] - param_range[0]) * 0.8
+    else:
+        width = 0.6
 
     for ax, algo in zip(axes, algorithms):
-        # 1) inferred‐sizes boxplot
-        data = [ cluster_sizes[p][algo] for p in param_range ]
-        width = (param_range[1]-param_range[0])*0.8 if len(param_range)>1 else 0.6
-        bp = ax.boxplot(
-            data,
-            positions=param_range,
-            widths=width,
-            patch_artist=True,
-            boxprops=dict(facecolor="C0", alpha=0.6),  # blue boxes
-            medianprops=dict(color="navy")
-        )
+        data = [ cluster_sizes[c][algo] for c in param_range ]
+        ax.boxplot(data,
+                    positions=param_range,
+                    widths=width,
+                    patch_artist=True)
 
-        # 2) overlay true sizes as red dots
-        for p in param_range:
-            ts = true_cluster_sizes[p]
-            x  = np.full(len(ts), p)
-            ax.scatter(
-                x, ts,
-                color="red",
-                alpha=0.6,
-                s=20,
-                label="True size" if algo==algorithms[0] else ""
-            )
+        first = True
+        for c in param_range:
+            true_sizes = np.array(true_cluster_sizes[c], dtype=float)
+            true_val  = true_sizes.mean()
+            ax.scatter([c], [true_val],
+                        color='red',
+                        marker='o',
+                        s=15,             
+                        label='True' if first else '_nolegend_')
+            first = False
 
         ax.set_ylabel(f"{algo}\ncluster size", fontsize=12)
         ax.grid(axis='y')
 
+        handles, labels = ax.get_legend_handles_labels()
+        by_label = dict(zip(labels, handles))
+        ax.legend(by_label.values(), by_label.keys(),
+                    fontsize=12, title="Legend")
+
     axes[-1].set_xlabel(param_name, fontsize=14)
     fig.suptitle(title, fontsize=16, fontweight="bold")
-
-    # only one legend
-    handles, labels = axes[0].get_legend_handles_labels()
-    if handles:
-        axes[0].legend(handles, labels, loc="upper right")
-
     plt.tight_layout(rect=[0,0.03,1,0.95])
     plt.show()
 

@@ -78,7 +78,7 @@ def validation_range_K(range_K, n: int=3000, n_graphs: int=15, modify: str="out"
     for K in range_K:
         print(f"Starting K = {K}...")
         if graph_type == "sbm":
-            p = 2 * K * np.log(n)/n
+            p = np.log(n)/n
             n_reps_p = np.full(n_graphs, p)
             graphs, _, memberships = sbm_generation(n=n, K=K, range_p=n_reps_p, modify=modify)
         elif graph_type == "abcd":
@@ -128,7 +128,7 @@ def validation_range_K(range_K, n: int=3000, n_graphs: int=15, modify: str="out"
 
     return results_mean, number_clusters
 
-def validation_range_p(range_p: np.array=None, K: int=3, n: int=1000, n_reps: int=15, modify: str="out", graph_type: str="sbm", possible_algorithms: list=algorithms, plot: bool=True):
+def validation_range_p(range_p: np.array=None, K: int=3, n: int=3000, n_reps: int=15, modify: str="out", graph_type: str="sbm", possible_algorithms: list=algorithms, plot: bool=True):
     """Compute the average score for all possible pairs (index, algorithm) for a fixed number of true communities K, tested for various SBM or ABCD graphs modifying p_in or p_out depending on `modify`.
 
     Args:
@@ -165,7 +165,7 @@ def validation_range_p(range_p: np.array=None, K: int=3, n: int=1000, n_reps: in
     for p in range_p:
         if graph_type == "sbm":
             n_reps_p = np.full(n_reps, p)
-            graphs, _, memberships = sbm_generation(K=K, range_p=n_reps_p, modify=modify)
+            graphs, _, memberships = sbm_generation(n=n, K=K, range_p=n_reps_p, modify=modify)
         elif graph_type == "abcd":
             graphs, _, memberships = abcd_equal_size_range_xi(range_xi=[p], n_reps=n_reps, K=K, n=n)
         else:
@@ -242,10 +242,14 @@ def validation_range_n(range_n: np.array=None, K: int=10, n_graphs: int=5, modif
     
     for n in range_n:
         if graph_type == "sbm":
-            graphs, _, memberships = sbm_generation(n=n, K=K, nb_probas=n_graphs, modify=modify)
+            p = 2*K*np.log(n)/n
+            n_reps_p = np.full(n_graphs, p/6)
+            graphs, _, memberships = sbm_generation(n=n, K=K, range_p=n_reps_p, modify=modify)
         elif graph_type=="abcd":
             assert n%K == 0
-            graphs, _, memberships = abcd_equal_size_range_xi(num_graphs=n_graphs, xi_max=0.5, n=n, K=K)
+            xi = 0.5  # fixed xi for ABCD graphs
+            n_reps_xi = np.full(n_graphs, xi)
+            graphs, _, memberships = abcd_equal_size_range_xi(range_xi=n_reps_xi,num_graphs=n_graphs, n=n, K=K)
         df = evaluate_all(graphs, memberships, possible_algos=possible_algorithms, graph_type=graph_type)
         means = df["mean"].unstack(0)
         sem = (df["std"]/np.sqrt(n_graphs)).unstack(0)
@@ -255,12 +259,6 @@ def validation_range_n(range_n: np.array=None, K: int=10, n_graphs: int=5, modif
             for metric in possible_metrics:
                 results.loc[(n, metric), algorithm] = means.loc[metric, algorithm]
                 results_sem.loc[(n, metric), algorithm]  = sem.loc[metric, algorithm]
-                # _, avg_score, std_score, cluster_dict = compute_score(
-                #     metric, algorithm, graphs, memberships, possible_algos=possible_algorithms, graph_type=graph_type
-                # )
-                # results.loc[(n, metric), algorithm] = avg_score
-                # results_std.loc[(n, metric), algorithm] = std_score
-                # k_algo_counts.extend(cluster_dict.values())
             number_clusters.loc[n, algorithm] = means_ns[algorithm]
         print(f"Completed {param_name} = {n}.")
     
@@ -287,127 +285,369 @@ def validation_range_n(range_n: np.array=None, K: int=10, n_graphs: int=5, modif
     return results, number_clusters
 
 ## 2 more validation functions for ABCD graphs (for c_min and d_max):
-def validation_range_c_min(num_graphs: int, K: int=15,  n: int=5000, c_max: int=1000, xi_max: float=0.5, plot: bool=True):
-    param_name = "c_min"
+# def validation_range_c_min(num_graphs: int, K: int=15,  n: int=5000, c_max: int=1000, xi_max: float=0.5, plot: bool=True):
+#     param_name = "c_min"
     
-    assert n%K == 0, f"n={n} must be divisible by K={K} for equal-sized communities."
-    max_val = int(n/K)
-    assert max_val <= c_max
-    range_c = np.linspace(20, max_val, num_graphs, dtype=int)
+#     assert n%K == 0, f"n={n} must be divisible by K={K} for equal-sized communities."
+#     max_val = int(n/K)
+#     assert max_val <= c_max
+#     range_c = np.linspace(20, max_val, num_graphs, dtype=int)
     
-    multi_ind = pd.MultiIndex.from_product(
-        [range_c, possible_metrics], names=[param_name, "Metric"]
-    )
-    results = pd.DataFrame(index=multi_ind, columns=algorithms)
-    results_std = pd.DataFrame(index=multi_ind, columns=algorithms)
-    number_clusters = pd.DataFrame(index=range_c, columns=algorithms)
-    cluster_sizes = { c: { algo: [] for algo in algorithms } for c in range_c}
-    true_cluster_sizes = { c: [] for c in range_c }
+#     multi_ind = pd.MultiIndex.from_product(
+#         [range_c, possible_metrics], names=[param_name, "Metric"]
+#     )
+#     results = pd.DataFrame(index=multi_ind, columns=algorithms)
+#     results_std = pd.DataFrame(index=multi_ind, columns=algorithms)
+#     number_clusters = pd.DataFrame(index=range_c, columns=algorithms)
+#     cluster_sizes = { c: { algo: [] for algo in algorithms } for c in range_c}
+#     true_cluster_sizes = { c: [] for c in range_c }
     
-    for c in range_c:
-        print(f"Starting c_min = {c}...")
-        graphs, _, memberships = abcd_equal_size_range_xi(num_graphs=5, xi_max=xi_max, n=n, K=K, c_min=c, c_max=c_max)
-        ts = []
-        for b in memberships.values():
-            ts.extend(np.bincount(b).tolist())
-        true_cluster_sizes[c] = ts
-        for algorithm in algorithms:
-            k_algo_counts = []
-            for metric in possible_metrics:
-                _, avg_score, std_score, cluster_dict = compute_score(
-                    metric, algorithm, graphs, memberships, graph_type="abcd"
-                )
-                results.loc[(c, metric), algorithm] = avg_score
-                results_std.loc[(c, metric), algorithm] = std_score
-                k_algo_counts.extend(cluster_dict.values())
-            number_clusters.loc[c, algorithm] = np.mean(k_algo_counts)
-            preds, _ = get_predicted_memberships(algorithm, graphs, memberships, graph_type="abcd")
-            # flatten every run’s cluster sizes into one list
-            sizes = []
-            for name, m in preds.items():
-                sizes.extend(np.bincount(m).tolist())
-            cluster_sizes[c][algorithm] = sizes
-        print(f"Completed {param_name} = {c}.")
+#     for c in range_c:
+#         print(f"Starting c_min = {c}...")
+#         graphs, _, memberships = abcd_equal_size_range_xi(num_graphs=5, xi_max=xi_max, n=n, K=K, c_min=c, c_max=c_max)
+#         ts = []
+#         for b in memberships.values():
+#             ts.extend(np.bincount(b).tolist())
+#         true_cluster_sizes[c] = ts
+#         for algorithm in algorithms:
+#             k_algo_counts = []
+#             for metric in possible_metrics:
+#                 _, avg_score, std_score, cluster_dict = compute_score(
+#                     metric, algorithm, graphs, memberships, graph_type="abcd"
+#                 )
+#                 results.loc[(c, metric), algorithm] = avg_score
+#                 results_std.loc[(c, metric), algorithm] = std_score
+#                 k_algo_counts.extend(cluster_dict.values())
+#             number_clusters.loc[c, algorithm] = np.mean(k_algo_counts)
+#             preds, _ = get_predicted_memberships(algorithm, graphs, memberships, graph_type="abcd")
+#             # flatten every run’s cluster sizes into one list
+#             sizes = []
+#             for _, m in preds.items():
+#                 sizes.extend(np.bincount(m).tolist())
+#             cluster_sizes[c][algorithm] = sizes
+#         print(f"Completed {param_name} = {c}.")
         
-    ## Save the results in a csv file
-    name_table = f"evaluations/scores_K{K}_{param_name}_from{range_c[0]}to{range_c[-1]}_ABCD.csv"
-    results.to_csv(name_table)
-    print(f"Results saved at {name_table}!")
+#     ## Save the results in a csv file
+#     name_table = f"evaluations/scores_K{K}_{param_name}_from{range_c[0]}to{range_c[-1]}_ABCD.csv"
+#     results.to_csv(name_table)
+#     print(f"Results saved at {name_table}!")
     
-    if plot:
-        title = f"Community detection average performance for {K} communities across different scores, using ABCD graphs varying {param_name} (n={n}, c_max={c_max}, xi_max={xi_max})"
-        plot_results_generic(results, results_std, param_name, title=title)
-        #plot_single_score(results, results_std, param_name, title=title)
-        plot_inferred_K_fixed_param(
-            number_clusters, 
-            param_range=range_c, 
-            param_name=param_name, 
-            true_K=K,
-            title=f"Inferred Clusters vs c_min (K={K})"
+#     if plot:
+#         title = f"Community detection average performance for {K} communities across different scores, using ABCD graphs varying {param_name} (n={n}, c_max={c_max}, xi_max={xi_max})"
+#         plot_results_generic(results, results_std, param_name, title=title)
+#         #plot_single_score(results, results_std, param_name, title=title)
+#         plot_inferred_K_fixed_param(
+#             number_clusters, 
+#             param_range=range_c, 
+#             param_name=param_name, 
+#             true_K=K,
+#             title=f"Inferred Clusters vs c_min (K={K})"
+#         )
+#         title_boxplot = f"Distribution of inferred cluster-counts for varying c_min (K={K}, n={n}, c_max={c_max}, xi_max={xi_max})"
+#         plot_cluster_size_boxplots(cluster_sizes, true_cluster_sizes, range_c, param_name, title=title_boxplot)
+    
+#     return results, number_clusters
+
+def validation_range_c_min(
+    num_graphs: int,
+    K: int = 15,
+    n: int = 5000,
+    c_max: int = 1000,
+    xi_max: float = 0.5,
+    plot: bool = True
+):
+    """
+    Evaluate performance across different c_min values for ABCD graphs.
+
+    Returns:
+      results (DataFrame): mean scores indexed by (c_min, metric) × algorithm
+      number_clusters (DataFrame): mean number of clusters found per c_min × algorithm
+    """
+    param_name = "c_min"
+    assert n % K == 0, "n must be divisible by K"
+    max_c = n // K
+    assert max_c <= c_max
+
+    # choose c_min values
+    range_c = np.linspace(20, max_c, num_graphs, dtype=int)
+
+    # prepare results DataFrames
+    mindex         = pd.MultiIndex.from_product([range_c, possible_metrics],
+                                                names=[param_name, "Metric"])
+    results        = pd.DataFrame(index=mindex, columns=algorithms, dtype=float)
+    results_std    = pd.DataFrame(index=mindex, columns=algorithms, dtype=float)
+    number_clusters = pd.DataFrame(index=range_c, columns=algorithms, dtype=float)
+
+    # containers for cluster sizes
+    cluster_sizes      = {c: {} for c in range_c}
+    true_cluster_sizes = {}
+
+    for c in range_c:
+        print(f"→ Generating ABCD graphs for c_min={c}")
+        # generate graphs
+        graphs, _, true_members = abcd_equal_size_range_xi(
+            range_xi=None,
+            num_graphs=num_graphs,
+            n_reps=1,
+            xi_max=xi_max,
+            n=n,
+            K=K,
+            c_min=c,
+            c_max=c_max
         )
-        title_boxplot = f"Distribution of inferred cluster-counts for varying c_min (K={K}, n={n}, c_max={c_max}, xi_max={xi_max})"
-        plot_cluster_size_boxplots(cluster_sizes, true_cluster_sizes, range_c, param_name, title=title_boxplot)
-    
+
+        # true cluster-size distribution
+        ts = []
+        for b in true_members.values():
+            b = np.array(b, dtype=int)
+            # if your memberships are 1…K, shift them to 0…K-1:
+            if b.min() == 1 and b.max() == K:
+                b = b - 1
+            _, counts = np.unique(b, return_counts=True)
+            ts.extend(counts.tolist())
+        true_cluster_sizes[c] = ts
+
+        # batch-compute metrics
+        df    = evaluate_all(graphs, true_members,
+                            possible_algos=algorithms,
+                            graph_type="abcd")
+        means = df["mean"].unstack(level=1)
+        stds  = df["std" ].unstack(level=1)
+        
+
+        # fill results for this c
+        for metric in possible_metrics:
+            for algo in algorithms:
+                results.loc[(c, metric), algo]     = means.loc[(algo, metric)]
+                results_std.loc[(c, metric), algo] = stds.loc[(algo, metric)]
+
+        # mean number of clusters found
+        mean_nfound = df["mean_n"].unstack(level=1).mean(axis=1)
+        for algo in algorithms:
+            number_clusters.loc[c, algo] = mean_nfound.loc[algo]
+
+        # predicted cluster-size distributions
+        for algo in algorithms:
+            preds, _ = get_predicted_memberships(
+                algo, graphs, true_members,
+                possible_algos=algorithms,
+                graph_type="abcd"
+            )
+            flat = np.concatenate([np.bincount(p) for p in preds.values()])
+            cluster_sizes[c][algo] = flat.tolist()
+
+        print(f"✓ Done c_min={c}")
+
+    # save mean scores
+    out_path = f"evaluations/scores_K{K}_{param_name}_from{range_c[0]}to{range_c[-1]}_ABCD.csv"
+    results.to_csv(out_path)
+    print(f"Saved results to {out_path}")
+
+    if plot:
+        title = f"ABCD performance vs {param_name} (K={K}, n={n}, xi_max={xi_max})"
+        plot_results_generic(results, results_std, param_name, title=title)
+
+        plot_inferred_K(
+            number_clusters,
+            param_range=range_c,
+            param_name=param_name,
+            true_K=K,
+            title=f"Inferred Clusters vs {param_name}"
+        )
+
+        plot_cluster_size_boxplots(
+            cluster_sizes,
+            true_cluster_sizes,
+            param_range=range_c,
+            param_name=param_name,
+            title=f"Cluster-size distributions vs {param_name}"
+        )
+
     return results, number_clusters
 
-def validation_range_d_max(num_graphs: int, K: int=5,  n: int=5000, d_min: int=5, xi_max:float=0.5, plot: bool=True):
-    assert n%K == 0, f"n={n} must be divisible by K={K} for equal-sized communities."
-    max_val = n//10
-    assert max_val >= d_min
-    range_d = np.linspace(20, max_val, num_graphs, dtype=int)
+# def validation_range_d_max(num_graphs: int, K: int=5,  n: int=5000, d_min: int=5, xi_max:float=0.5, plot: bool=True):
+#     assert n%K == 0, f"n={n} must be divisible by K={K} for equal-sized communities."
+#     max_val = n//10
+#     assert max_val >= d_min
+#     range_d = np.linspace(20, max_val, num_graphs, dtype=int)
     
-    param_name = "d_max"
+#     param_name = "d_max"
     
-    multi_ind = pd.MultiIndex.from_product(
-        [range_d, possible_metrics], names=[param_name, "Metric"]
-    )
-    results = pd.DataFrame(index=multi_ind, columns=algorithms)
-    results_std = pd.DataFrame(index=multi_ind, columns=algorithms)
-    number_clusters = pd.DataFrame(index=range_d, columns=algorithms)
-    cluster_sizes = { d: { algo: [] for algo in algorithms } for d in range_d }
-    true_cluster_sizes = { d: [] for d in range_d }
+#     multi_ind = pd.MultiIndex.from_product(
+#         [range_d, possible_metrics], names=[param_name, "Metric"]
+#     )
+#     results = pd.DataFrame(index=multi_ind, columns=algorithms)
+#     results_std = pd.DataFrame(index=multi_ind, columns=algorithms)
+#     number_clusters = pd.DataFrame(index=range_d, columns=algorithms)
+#     cluster_sizes = { d: { algo: [] for algo in algorithms } for d in range_d }
+#     true_cluster_sizes = { d: [] for d in range_d }
     
-    for d in range_d:
-        graphs, _, memberships = abcd_equal_size_range_xi(num_graphs=5, xi_max=xi_max, n=n, K=K, d_min=d_min, d_max=d)
-        ts = []
-        for b in memberships.values():
-            ts.extend(np.bincount(b).tolist())
-        true_cluster_sizes[d] = ts
-        for algorithm in algorithms:
-            k_algo_counts = []
-            for metric in possible_metrics:
-                _, avg_score, std_score, cluster_dict = compute_score(
-                    metric, algorithm, graphs, memberships, graph_type="abcd"
-                )
-                results.loc[(d, metric), algorithm] = avg_score
-                results_std.loc[(d, metric), algorithm] = std_score
-                k_algo_counts.extend(cluster_dict.values())
-            number_clusters.loc[d, algorithm] = np.mean(k_algo_counts)
-            preds, _ = get_predicted_memberships(algorithm, graphs, memberships, graph_type="abcd")
-            # flatten every run’s cluster sizes into one list
-            sizes = []
-            for name, m in preds.items():
-                sizes.extend(np.bincount(m).tolist())
-            cluster_sizes[d][algorithm] = sizes
-        print(f"Completed {param_name} = {d}.")
+#     for d in range_d:
+#         graphs, _, memberships = abcd_equal_size_range_xi(num_graphs=5, xi_max=xi_max, n=n, K=K, d_min=d_min, d_max=d)
+#         ts = []
+#         for b in memberships.values():
+#             ts.extend(np.bincount(b).tolist())
+#         true_cluster_sizes[d] = ts
+#         for algorithm in algorithms:
+#             k_algo_counts = []
+#             for metric in possible_metrics:
+#                 _, avg_score, std_score, cluster_dict = compute_score(
+#                     metric, algorithm, graphs, memberships, graph_type="abcd"
+#                 )
+#                 results.loc[(d, metric), algorithm] = avg_score
+#                 results_std.loc[(d, metric), algorithm] = std_score
+#                 k_algo_counts.extend(cluster_dict.values())
+#             number_clusters.loc[d, algorithm] = np.mean(k_algo_counts)
+#             preds, _ = get_predicted_memberships(algorithm, graphs, memberships, graph_type="abcd")
+#             # flatten every run’s cluster sizes into one list
+#             sizes = []
+#             for name, m in preds.items():
+#                 sizes.extend(np.bincount(m).tolist())
+#             cluster_sizes[d][algorithm] = sizes
+#         print(f"Completed {param_name} = {d}.")
         
-    ## Save the results in a csv file
-    name_table = f"evaluations/scores_K{K}_dmax_from{range_d[0]}to{range_d[-1]}_ABCD.csv"
-    results.to_csv(name_table)
-    print(f"Results saved at {name_table}!")
+#     ## Save the results in a csv file
+#     name_table = f"evaluations/scores_K{K}_dmax_from{range_d[0]}to{range_d[-1]}_ABCD.csv"
+#     results.to_csv(name_table)
+#     print(f"Results saved at {name_table}!")
     
-    if plot:
-        title = f"Community detection average performance for {K} communities across different scores, using ABCD graphs varying d_max"
-        plot_results_generic(results, results_std, param_name=param_name, title=title)
-        #plot_single_score(results, results_std, param_name, title=title)
-        plot_inferred_K_fixed_param(
-            number_clusters, 
-            param_range=range_d, 
-            param_name=param_name, 
-            true_K=K,
-            title=f"Inferred Clusters vs d_max (K={K}, n={n}, d_min={d_min}, xi_max={xi_max})"
+#     if plot:
+#         title = f"Community detection average performance for {K} communities across different scores, using ABCD graphs varying d_max"
+#         plot_results_generic(results, results_std, param_name=param_name, title=title)
+#         #plot_single_score(results, results_std, param_name, title=title)
+#         plot_inferred_K_fixed_param(
+#             number_clusters, 
+#             param_range=range_d, 
+#             param_name=param_name, 
+#             true_K=K,
+#             title=f"Inferred Clusters vs d_max (K={K}, n={n}, d_min={d_min}, xi_max={xi_max})"
+#         )
+#         title_boxplot = f"Distribution of inferred cluster-counts for varying d_max (K={K}, n={n}, d_min={d_min}, xi_max={xi_max})"
+#         plot_cluster_size_boxplots(cluster_sizes, true_cluster_sizes, range_d, param_name, title=title_boxplot)
+    
+#     return results, number_clusters
+
+import numpy as np
+import pandas as pd
+
+from ABCD.abcd_generation import abcd_equal_size_range_xi
+from helpers import evaluate_all, get_predicted_memberships
+from plots import (
+    plot_results_generic,
+    plot_inferred_K_fixed_param as plot_inferred_K,
+    plot_cluster_size_boxplots
+)
+
+def validation_range_d_max(
+    num_graphs: int,
+    K: int = 5,
+    n: int = 5000,
+    d_min: int = 5,
+    xi_max: float = 0.5,
+    plot: bool = True
+):
+    assert n % K == 0, f"n={n} must be divisible by K={K}"
+    param_name = "d_max"
+    max_d = n // 10
+    assert max_d >= d_min
+
+    # 1) choose d_max values
+    range_d = np.linspace(d_min, max_d, num_graphs, dtype=int)
+
+    # 2) prepare result DataFrames
+    mindex       = pd.MultiIndex.from_product([range_d, possible_metrics],
+                                              names=[param_name, "Metric"])
+    results      = pd.DataFrame(index=mindex, columns=algorithms, dtype=float)
+    results_std  = pd.DataFrame(index=mindex, columns=algorithms, dtype=float)
+    number_clusters = pd.DataFrame(index=range_d, columns=algorithms, dtype=float)
+
+    # for boxplots
+    cluster_sizes      = {d: {} for d in range_d}
+    true_cluster_sizes = {}
+
+    for d in range_d:
+        print(f"→ Generating ABCD graphs for d_max = {d}")
+        # generate graphs
+        graphs, _, true_members = abcd_equal_size_range_xi(
+            range_xi=None,
+            num_graphs=num_graphs,
+            n_reps=1,
+            xi_max=xi_max,
+            n=n,
+            K=K,
+            c_min=None,
+            c_max=None,
+            d_min=d_min,
+            d_max=d
         )
-        title_boxplot = f"Distribution of inferred cluster-counts for varying d_max (K={K}, n={n}, d_min={d_min}, xi_max={xi_max})"
-        plot_cluster_size_boxplots(cluster_sizes, true_cluster_sizes, range_d, param_name, title=title_boxplot)
-    
+
+        # build true‐size list (one count per real cluster per graph)
+        ts = []
+        for b in true_members.values():
+            b = np.array(b, dtype=int)
+            # if labels are 1..K shift to 0..K-1
+            if b.min() == 1 and b.max() == K:
+                b = b - 1
+            _, counts = np.unique(b, return_counts=True)
+            ts.extend(counts.tolist())
+        true_cluster_sizes[d] = ts
+
+        # ——— batch‐compute all means & stds ———
+        df    = evaluate_all(graphs, true_members,
+                             possible_algos=algorithms,
+                             graph_type="abcd")
+        # fill in results per (d, metric, algo)
+        for algo in algorithms:
+            for metric in possible_metrics:
+                results.loc[(d, metric), algo]     = df.loc[(algo, metric), "mean"]
+                results_std.loc[(d, metric), algo] = df.loc[(algo, metric), "std"]
+
+        # ——— average number of clusters found ———
+        mean_nfound = df["mean_n"].unstack(level=0).mean(axis=0)
+        for algo in algorithms:
+            number_clusters.loc[d, algo] = mean_nfound[algo]
+
+        # ——— predicted cluster‐sizes for boxplots ———
+        for algo in algorithms:
+            preds, _ = get_predicted_memberships(
+                algo, graphs, true_members,
+                possible_algos=algorithms,
+                graph_type="abcd"
+            )
+            flat = []
+            for p in preds.values():
+                p = np.array(p, dtype=int)
+                if p.min() == 1 and p.max() == K:
+                    p = p - 1
+                flat.extend(np.bincount(p).tolist())
+            cluster_sizes[d][algo] = flat
+
+        print(f"✓ Done d_max = {d}")
+
+    # 3) save means
+    out_path = f"evaluations/scores_K{K}_{param_name}_from{range_d[0]}to{range_d[-1]}_ABCD.csv"
+    results.to_csv(out_path)
+    print(f"Results saved to {out_path}")
+
+    # 4) optional plotting
+    if plot:
+        title = f"ABCD performance vs {param_name} (K={K}, n={n}, xi_max={xi_max})"
+        plot_results_generic(results, results_std, param_name, title=title)
+
+        plot_inferred_K(
+            number_clusters,
+            param_range=range_d,
+            param_name=param_name,
+            true_K=K,
+            title=f"Inferred Clusters vs {param_name}"
+        )
+
+        plot_cluster_size_boxplots(
+            cluster_sizes,
+            true_cluster_sizes,
+            param_range=range_d,
+            param_name=param_name,
+            title=f"Cluster‐size distributions vs {param_name}"
+        )
+
     return results, number_clusters

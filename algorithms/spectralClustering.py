@@ -10,7 +10,7 @@ import numpy as np
 import scipy as sp
 from sklearn.cluster import KMeans, SpectralClustering
 
-import selfrepresentation as selfrepresentation
+from algorithms.selfrepresentation import *
 
 
 # =============================================================================
@@ -99,11 +99,11 @@ def spectralClustering_pabm( A, n_clusters, version = 'subspace' ):
         z = KMeans(n_clusters = n_clusters, n_init = 'auto' ).fit_predict( vecs @ np.diag( vals ) ) + np.ones( n )
     
     elif version == 'subspace':
-        model = selfrepresentation.ElasticNetSubspaceClustering( n_clusters = n_clusters ,algorithm = 'lasso_lars',gamma=50 ).fit( vecs @ np.diag( vals ) )
+        model = ElasticNetSubspaceClustering( n_clusters = n_clusters ,algorithm = 'lasso_lars',gamma=50 ).fit( vecs @ np.diag( vals ) )
         z = model.labels_ + np.ones( n )
 
     elif version == 'subspace-omp':
-        model = selfrepresentation.SparseSubspaceClusteringOMP( n_clusters = n_clusters, thr=1e-5 ).fit( vecs @ np.diag( vals ) )
+        model = SparseSubspaceClusteringOMP( n_clusters = n_clusters, thr=1e-5 ).fit( vecs @ np.diag( vals ) )
         z = model.labels_ + np.ones( n )
     
     return z.astype(int)

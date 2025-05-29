@@ -166,7 +166,7 @@ def active_support_elastic_net(X, y, alpha, tau=1.0, algorithm='spams', support_
         else:
             cs = sparse_encode(y, Xs, algorithm=algorithm, alpha=alpha)
 
-        delta = (y - np.dot(cs, Xs)) / alpha
+        delta = (y - np.dot(cs, Xs)) / (alpha+1e-10)
 		
         obj = tau * np.sum(np.abs(cs[0])) + (1.0 - tau)/2.0 * np.sum(np.power(cs[0], 2.0)) + alpha/2.0 * np.sum(np.power(delta, 2.0))
         if curr_obj - obj < 1.0e-10 * curr_obj:
