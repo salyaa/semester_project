@@ -15,18 +15,37 @@ from algorithms.spectralClustering import (
     orthogonalSpectralClustering
 )
 
-from sklearn.metrics import adjusted_mutual_info_score, adjusted_rand_score, v_measure_score, homogeneity_score, fowlkes_mallows_score
-
 from constants import *
 
-metric_functions = {
-        "adjusted_mutual_info_score": adjusted_mutual_info_score,
-        "adjusted_rand_score": adjusted_rand_score,
-        "v_measure_score": v_measure_score,
-        "homogeneity_score": homogeneity_score,
-        "fowlkes_mallows_score": fowlkes_mallows_score
-    }
+def to_ig(G):
+    """
+    Convert a graph to igraph format.
+    If G is already an igraph object, return it as is.
+    """
+    if isinstance(G, ig.Graph):
+        return G
+    elif isinstance(G, gt.Graph):
+        igG = ig.Graph(directed=G.is_directed())
+        igG.add_vertices(G.num_vertices())
+        igG.add_edges([(int(e.source()), int(e.target())) for e in G.edges()])
+        return igG
+    else:
+        raise TypeError("Unsupported graph type. Must be igraph or graph-tool.")
 
+def to_gt(G):
+    """
+    Convert a graph to graph-tool format.
+    If G is already a graph-tool object, return it as is.
+    """
+    if isinstance(G, gt.Graph):
+        return G
+    elif isinstance(G, ig.Graph):
+        gtG = gt.Graph(directed=G.is_directed())
+        gtG.add_vertex(n=G.vcount())
+        gtG.add_edge_list(G.get_edgelist())
+        return gtG
+    else:
+        raise TypeError("Unsupported graph type. Must be graph-tool or igraph.")
 
 def get_predicted_memberships(algorithm, graphs, block_membership, possible_algos=None, graph_type="sbm"):
     """
@@ -52,11 +71,9 @@ def get_predicted_memberships(algorithm, graphs, block_membership, possible_algo
         if algorithm == "bayesian":
             # convert to graph-tool
             if isinstance(G, ig.Graph):
-                gtG = gt.Graph(directed=False)
-                gtG.add_vertex(n=G.vcount())
-                gtG.add_edge_list(edge_list)
-                deg_correction = graph_type == "abcd"
-            clusters = bayesianInf(gtG, deg_corr=deg_correction)
+                G = to_gt(G)
+            deg_correction = graph_type == "abcd"
+            clusters = bayesianInf(G, deg_corr=deg_correction)
             pred = clusters.a
 
         elif algorithm == "spectral":
@@ -79,25 +96,21 @@ def get_predicted_memberships(algorithm, graphs, block_membership, possible_algo
         elif algorithm in ("louvain", "leiden"):
             # convert to igraph
             if not isinstance(G, ig.Graph):
-                igG = ig.Graph()
-                igG.add_vertices(n=G.num_vertices())
-                igG.add_edges(edge_list)
-                G = igG
+                G = to_ig(G)
             method = leiden if algorithm == "leiden" else louvain
             clusters = method(G)
             pred = clusters.membership
 
         elif algorithm == "walktrap":
+            if not isinstance(G, ig.Graph):
+                G = to_ig(G)
             clusters = walktrap(G, K=len(set(true_cluster)))
             pred = clusters.membership
 
         else: # custom spectral variants
             #A = adjacency_matrix_of(G)
             if not isinstance(G, ig.Graph):
-                igG = ig.Graph()
-                igG.add_vertices(n=G.num_vertices())
-                igG.add_edges(edge_list)
-                G = igG
+                G = to_ig(G)
             A = G.get_adjacency_sparse()
             spec_map = {
                 "sc_bm":   spectralClustering_bm,
